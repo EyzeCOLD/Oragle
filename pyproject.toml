@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mtg-rules-judge"
+version = "0.1.0"
+description = "Local CLI that answers Magic: the Gathering rules questions with rule-number citations"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+oragle = "mtgjudge.cli:main"
+mtg = "mtgjudge.cli:main"
+
+[tool.setuptools]
+packages = ["mtgjudge"]

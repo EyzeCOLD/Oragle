@@ -1,0 +1,48 @@
+HARD:
+Opalescence and Humility are both on the battlefield, and Opalescence entered
+first. There's also a Worship. Explain exactly what each of those three
+permanents is right now: types, abilities, and power and toughness.
+
+HARD:
+If my opponent's Urborg, Tomb of Yawgmoth entered the battlefield before my
+Blood Moon resolved, what land types does everything have? Does the answer
+change if Blood Moon was there first?
+
+HARD:
+I have Sylvan Library and Abundance. Walk me through my draw step: how many
+cards do I end up with in hand, and how much life do I pay to Sylvan Library?
+
+HARD:
+I control Rest in Peace and a Wheel of Sun and Moon attached to me. My
+Grizzly Bears dies. Where does it end up, and who decides which replacement
+effect applies first?
+
+I control Teferi, Time Raveler and my opponent cascades a Bloodbraid Elf
+into a sorcery. Can they cast it, and why?
+
+Can I activate Sundial of the Infinite during the end step of my Final
+Fortune extra turn to dodge the you lose the game trigger and keep playing
+that turn?
+
+HARD:
+I control Painter's Servant with green chosen, and I activate Grindstone
+targeting my opponent. Does it mill their entire library? What exactly
+happens instead if their library contains Emrakul, the Aeons Torn?
+
+HARD:
+Explain step by step how Dark Depths and Thespian's Stage make a 20/20 Marit
+Lage, including the legend rule and what is left on the battlefield at the
+end.
+
+HARD:
+In a Two-Headed Giant game I control Lich's Mirror and our team is about to
+lose the game. What exactly happens to me, my teammate, and our stuff?
+
+Does Devoted Druid generate infinite mana with Vizier of Remedies on the
+battlefield? Which exact rule makes that work?
+
+HARD:
+I cast Teferi's Protection, and my opponent follows with Supreme Verdict
+that same turn, then an overloaded Cyclonic Rift on their next turn. What
+happens to my permanents each time, can I take damage meanwhile, and when
+does everything phase back in?

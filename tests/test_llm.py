@@ -1,0 +1,225 @@
+import json
+import os
+import unittest
+from unittest import mock
+
+from mtgjudge import cards, llm
+
+
+def tool_call_response(call_id, name, args):
+    return {
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(args)},
+                }],
+            }
+        }]
+    }
+
+
+def text_response(text):
+    return {"choices": [{"message": {"role": "assistant", "content": text}}]}
+
+
+class ToolLoopTest(unittest.TestCase):
+    def setUp(self):
+        self.env = {"MISTRAL_API_KEY": "k"}
+        for k, v in self.env.items():
+            os.environ.setdefault(k, v)
+        self.calls = []
+
+    def _script(self, responses):
+        def fake_post(url, payload, headers=None, timeout=0):
+            self.calls.append(payload)
+            return responses[len(self.calls) - 1]
+        return fake_post
+
+    def test_tool_round_trip(self):
+        responses = [
+            tool_call_response("c1", "search_cards", {"query": "c<=2 colors:blue"}),
+            text_response("Blue instants found."),
+        ]
+        runner_calls = []
+
+        def runner(name, args):
+            runner_calls.append((name, args))
+            return "2 card(s) match. Showing 1:\n- Unsummon {U} | Instant | return"
+
+        with mock.patch.object(llm.net, "post_json", side_effect=self._script(responses)), \
+             mock.patch.dict(os.environ, self.env):
+            backend, model, answer = llm.ask_llm(
+                "sys", [], "any cheap blue stuff?",
+                tools=[{"type": "function", "function": {"name": "search_cards",
+                                                        "parameters": {"type": "object"}}}],
+                tool_runner=runner,
+            )
+        self.assertEqual(answer, "Blue instants found.")
+        self.assertEqual(runner_calls, [("search_cards", {"query": "c<=2 colors:blue"})])
+        # round 2 payload must contain the assistant echo + tool result
+        sent = self.calls[1]["messages"]
+        self.assertEqual(sent[2]["role"], "assistant")
+        self.assertEqual(sent[2]["tool_calls"][0]["id"], "c1")
+        self.assertEqual(sent[3]["role"], "tool")
+        self.assertIn("Unsummon", sent[3]["content"])
+        # round 1 payload offered the tools
+        self.assertIn("tools", self.calls[0])
+
+    def test_runs_last_tools_when_out_of_rounds(self):
+        responses = [
+            tool_call_response("c1", "search_cards", {"query": "t:goblin"}),
+            text_response("answered with search results."),
+        ]
+        runner_calls = []
+
+        def runner(name, args):
+            runner_calls.append(args)
+            return "0 cards matched."
+
+        with mock.patch.object(llm.net, "post_json", side_effect=self._script(responses)), \
+             mock.patch.dict(os.environ, self.env):
+            _b, _m, answer = llm.ask_llm(
+                "sys", [], "q", tools=[], tool_runner=runner, max_tool_rounds=0,
+            )
+        self.assertEqual(answer, "answered with search results.")
+        self.assertEqual(len(runner_calls), 1)
+        self.assertEqual(self.calls[1]["messages"][3]["content"], "0 cards matched.")
+
+    def test_no_tools_single_shot(self):
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._script([text_response("plain answer")])) as post, \
+             mock.patch.dict(os.environ, self.env):
+            _b, _m, answer = llm.ask_llm("sys", [], "hi")
+        self.assertEqual(answer, "plain answer")
+        self.assertNotIn("tools", self.calls[0])
+        self.assertEqual(post.call_count, 1)
+
+    def test_history_inserted_between_system_and_question(self):
+        history = [{"role": "user", "content": "who goes first?"},
+                   {"role": "assistant", "content": "random (808.4)."}]
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._script([text_response("ok")])) as post, \
+             mock.patch.dict(os.environ, self.env):
+            _b, _m, answer = llm.ask_llm("sys", [], "in 2HG?",
+                                         history=history)
+        self.assertEqual(answer, "ok")
+        msgs = self.calls[0]["messages"]
+        self.assertEqual(msgs[0]["role"], "system")
+        self.assertEqual(msgs[1]["role"], "user")
+        self.assertEqual(msgs[1]["content"], "who goes first?")
+        self.assertEqual(msgs[2]["role"], "assistant")
+        self.assertIn("QUESTION: in 2HG?", msgs[3]["content"])
+        self.assertEqual(post.call_count, 1)
+
+    def test_history_capped_to_last_messages(self):
+        history = [{"role": "user", "content": f"q{i}"} for i in range(10)]
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._script([text_response("ok")])), \
+             mock.patch.dict(os.environ, self.env):
+            llm.ask_llm("sys", [], "now", history=history)
+        msgs = self.calls[0]["messages"]
+        sent = [m["content"] for m in msgs[1:-1]]
+        self.assertEqual(sent, [f"q{i}" for i in range(4, 10)])
+
+    def test_progress_events_report_tools_and_rounds(self):
+        responses = [
+            tool_call_response("c1", "search_rules", {"query": "legend rule"}),
+            tool_call_response("c2", "search_cards", {"query": "t:legendary"}),
+            text_response("done"),
+        ]
+
+        def runner(name, args):
+            return "results"
+
+        events = []
+        with mock.patch.object(llm.net, "post_json", side_effect=self._script(responses)), \
+             mock.patch.dict(os.environ, self.env):
+            llm.ask_llm("sys", [], "q", tools=[], tool_runner=runner,
+                        max_tool_rounds=2, progress=events.append)
+        self.assertTrue(any("search_rules(query='legend rule')" in e for e in events))
+        self.assertTrue(any("search_cards(query='t:legendary')" in e for e in events))
+        self.assertTrue(any("round 2" in e for e in events))
+        self.assertTrue(any("round 3" in e for e in events))
+
+
+class ContentEchoTest(unittest.TestCase):
+    def test_block_list_echoed_as_text(self):
+        msg = {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": [{"type": "text", "text": "h"}]},
+                        {"type": "text", "text": "searching"}],
+            "tool_calls": [{"id": "c1", "type": "function",
+                            "function": {"name": "t", "arguments": "{}"}}],
+        }
+        echo = llm._assistant_echo(msg)
+        self.assertEqual(echo["content"], "searching")
+        self.assertIn("tool_calls", echo)
+
+
+class SearchRulesRunnerTest(unittest.TestCase):
+    def test_returns_rule_blocks(self):
+        from mtgjudge import cli
+        from mtgjudge.cr import Rule
+
+        chunks = [Rule(number="700.4", text="The term dies means put into a graveyard.",
+                       chapter="Additional Rules", section="General")]
+        runner = cli.make_tool_runner(chunks)
+        result = runner("search_rules", {"query": "dies graveyard", "top": 3})
+        self.assertIn("RULE 700.4", result)
+        self.assertIn("dies means", result)
+
+    def test_bad_vocabulary_gets_hint(self):
+        from mtgjudge import cli
+        from mtgjudge.cr import Rule
+
+        chunks = [Rule(number="700.4", text="The term dies means put into a graveyard.",
+                       chapter="", section="")]
+        runner = cli.make_tool_runner(chunks)
+        result = runner("search_rules", {"query": "zzz qqq"})
+        self.assertIn("No rules matched", result)
+
+    def test_unknown_tool(self):
+        from mtgjudge import cli
+        runner = cli.make_tool_runner([])
+        self.assertIn("no such tool", runner("does_not_exist", {}))
+
+
+class SearchTest(unittest.TestCase):
+    def test_search_404_empty(self):
+        from mtgjudge.net import NetError
+
+        def raise_404(url, timeout=0, headers=None):
+            raise NetError("HTTP 404", status=404)
+
+        with mock.patch.object(cards.net, "get_json", side_effect=raise_404):
+            found, total = cards.search_cards("bogus:nothing")
+        self.assertEqual((found, total), ([], 0))
+
+    def test_brief_format_truncates(self):
+        found = [
+            {"name": "Into the Roil", "mana_cost": "{1}{U}", "type_line": "Instant",
+             "oracle_text": "Return target nonland permanent. " + "word " * 140},
+            {"name": "Faceless", "type_line": "", "oracle_text": ""},
+        ]
+        brief = cards.format_search_brief(found, 137)
+        self.assertIn("137 card(s) match. Showing 2:", brief)
+        self.assertIn("Into the Roil {1}{U} | Instant |", brief)
+        # few results (a card-resolution lookup) still truncate, at 600
+        self.assertIn("...", brief.splitlines()[1])
+        self.assertIn("(no rules text)", brief)
+
+    def test_brief_small_result_set_gets_bigger_budget(self):
+        found = [
+            {"name": "Card", "mana_cost": "{1}{U}", "type_line": "Instant",
+             "oracle_text": "word " * 50},  # 250 chars: >220, <600
+        ]
+        brief = cards.format_search_brief(found, 1)
+        self.assertNotIn("...", brief.splitlines()[1])
+
+
+if __name__ == "__main__":
+    unittest.main()
