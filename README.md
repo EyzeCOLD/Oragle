@@ -6,6 +6,30 @@ copy of every Oracle card text on your disk. Its goal is answers a human can
 verify by citation — not an infallible judge, and it says so when the rules it
 retrieved don't cover the question.
 
+**What it concretely does, per question:**
+
+1. **Deterministic parsing** — `[[Name]]` references and pasted
+   decklists resolve against the local SQLite card database (Scryfall
+   Oracle bulk data): oracle text, rulings, and keyword-ability rules
+   become context blocks before any model call. Player slang
+   ("bounce", "ETB", "cmdr", format names) expands to Comprehensive
+   Rules vocabulary.
+2. **Deterministic retrieval** — BM25 keyword search over an indexed
+   copy of the official Comprehensive Rules pulls the relevant rule
+   texts. Rules cited by retrieved rules, format rules for named
+   formats, and the golden rules (101.1/101.2) are added up front, so
+   the model rarely has to go looking.
+3. **Grounded answering** — an LLM receives only those context blocks
+   and must answer from them, citing rule numbers for every claim —
+   or say the retrieved context doesn't cover the question.
+4. **Bounded tool use** — if retrieval missed something, the model can
+   call `search_rules` (the local index, works offline) and
+   `search_cards` (live Scryfall syntax) for extra rounds before
+   answering.
+5. **Streaming answers** — responses stream line by line; rule numbers
+   are links that expand the rule text from the local index, card
+   names link to Scryfall, mana symbols render with icons.
+
 Two frontends, one engine: a terminal CLI (one-shot questions and an
 interactive session) and a small web app you can put behind a token for
 your phone. Everything is local-first: rules and card data live on your
