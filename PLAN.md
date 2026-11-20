@@ -287,6 +287,23 @@ parchment footer/summary 4.08 -> 4.97 (#5a4623). All remaining
 header pairs measure 5.3-6.6. Rerun: `uv run --with websocket-client
 python dev/a11y_check.py`.
 
+Fourth theme pass (user-reported): jade buttons measured ~1.9:1 at
+the gradient's dark bottom with dark text — the gem goes a shade
+deeper (#157f63 -> #085741 range) and the text is now engraved white
+(4.6 at the lightest stop, 7.7 at the darkest); hover keeps the face
+and brightens glow/text instead of lightening the gradient (which
+broke 4.5). Wood modal leaf text #e4d6ab (8.0), steel #cdd7e2 (6.3).
+Steel beam darkened (#4a525b) so the sub-line has real margin (6.0).
+Steel answers are no longer parchment: cold ledger-paper sheets
+(steel-blue links, pewter wax seal, slate ink #26303b at 7.4 on the
+darkest paper shade). The three bouncing dots are replaced by a CSS
+hourglass: the glass frame (clip-path bowtie, bronze in wood / pewter
+in steel) flips end-over-end every 2.6s while a separate gravity-fixed
+sand pile (gold/silver) glints and a stream falls through the neck —
+the sand element sits OUTSIDE the rotating element so the pile always
+stays in the visual bottom bulb through the flip.
+prefers-reduced-motion freezes it to a static hourglass.
+
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO
 exports, "N Card"/"Nx"/"xN" counts, set suffixes, comments, SECTION

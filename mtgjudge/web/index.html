@@ -117,16 +117,16 @@
   /* ---- primary buttons: jade gemstones --------------------------------- */
   form button, #gate button, #deckpanel .row button, #threadbar button {
     background:
-      radial-gradient(130% 100% at 30% 12%,
-        rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 45%),
-      linear-gradient(170deg, #63dfaa 0%, #23a374 45%, #0c6e52 80%, #085741);
+      radial-gradient(90% 70% at 25% 6%,
+        rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 40%),
+      linear-gradient(170deg, #157f63 0%, #0e6b52 45%, #0a5644 80%, #085741);
     border: 1px solid #03392a;
     border-radius: 999px;
     box-shadow: inset 0 2px 3px rgba(255, 255, 255, .4),
                 inset 0 -5px 9px rgba(0, 25, 15, .6),
                 0 2px 6px rgba(0, 0, 0, .65),
                 0 0 12px rgba(70, 225, 165, .22);
-    color: #eafff2;
+    color: #f6fffb;
     font: 700 12.5px Georgia, "Times New Roman", serif;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -136,14 +136,16 @@
   }
   form button:hover, #gate button:hover, #deckpanel .row button:hover,
   #threadbar button:hover {
+    /* same face, brighter glow: keeps text contrast intact */
+    color: #ffffff;
     box-shadow: inset 0 2px 3px rgba(255, 255, 255, .5),
                 inset 0 -5px 9px rgba(0, 25, 15, .6),
                 0 2px 6px rgba(0, 0, 0, .65),
-                0 0 18px rgba(90, 255, 190, .45);
+                0 0 26px rgba(90, 255, 190, .6);
   }
   form button:active, #gate button:active, #deckpanel .row button:active,
   #threadbar button:active {
-    background: linear-gradient(10deg, #085741, #0f7a59);
+    background: linear-gradient(170deg, #0a4d3d 0%, #116b52);
     box-shadow: inset 0 4px 7px rgba(0, 20, 12, .8),
                 inset 0 -1px 0 rgba(190, 255, 220, .3),
                 0 1px 2px rgba(0, 0, 0, .6);
@@ -440,7 +442,7 @@
     text-shadow: 0 -1px 0 #553a10, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9);
   }
   #gate p, #deckpanel p {
-    margin: 0 0 14px; color: #c9b183; font-size: 13.5px;
+    margin: 0 0 14px; color: #e4d6ab; font-size: 13.5px;
     font-family: Georgia, "Times New Roman", serif;
   }
   #gate input { width: 100%; margin-bottom: 12px; }
@@ -484,7 +486,7 @@
   /* riveted steel beams */
   body.steel header, body.steel form {
     background: var(--noise), var(--tex-steel), var(--tex-steel-coarse),
-                linear-gradient(180deg, #5b646e, #3d444c 60%, #2a3037);
+                linear-gradient(180deg, #4a525b, #333a42 60%, #252b31);
     border-bottom-color: #000;
     box-shadow: inset 0 1px 0 #d5e0ea,
                 inset 0 2px 1px rgba(170, 195, 220, .4),
@@ -588,7 +590,7 @@
     color: #d7e4ef;
     text-shadow: 0 -1px 0 #66788a, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9);
   }
-  body.steel #gate p, body.steel #deckpanel p { color: #b8c4d2; }
+  body.steel #gate p, body.steel #deckpanel p { color: #cdd7e2; }
   /* viewport in steel mode: silver rivets, cold ambient glow */
   body.steel main {
     background:
@@ -612,25 +614,83 @@
                 inset -1px -1px 0 rgba(190, 220, 245, .08),
                 0 0 0 1px #86a8c6, 0 0 10px rgba(140, 195, 240, .35);
   }
+  /* answers in steel mode: cold ledger paper instead of parchment */
+  body.steel .answer {
+    background: var(--noise),
+                radial-gradient(130% 110% at 50% 0, #eef1f4, #d9dee4 70%, #c7cdd5);
+    border: 1px solid #5d6a77;
+    color: #26303b;
+  }
+  body.steel .answer::after {  /* pewter seal */
+    background: radial-gradient(circle at 36% 30%, #eef4fa, #9fb0bf 45%, #5b6a78 78%, #2c343d);
+  }
+  body.steel .answer a.rule { color: #2f517d; text-shadow: none; }
+  body.steel .answer a.rule:hover { color: #22405f; }
+  body.steel .answer a.card,
+  body.steel .answer a.card:visited { color: #274e8d; text-shadow: none; }
+  body.steel .answer .footer {
+    border-top: 1px solid #a8b4c0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    color: #3f4b58;
+  }
+  body.steel .answer summary { color: #3f4b58; }
+  body.steel .answer summary:hover { color: #2f3b48; }
+  body.steel .answer details pre {
+    background: rgba(40, 50, 60, .07);
+    color: #34404d;
+  }
   body.steel ::selection { background: #2b4a52; }
   /* ---- working indicator: gold orbs -------------------------------------- */
-  .dots { display: inline-flex; gap: 4px; margin-left: 8px;
-          vertical-align: middle; }
-  .dots i {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #ffe9ad, #d9a83f 65%);
-    box-shadow: 0 0 5px rgba(232, 189, 84, .8);
-    opacity: .25;
-    animation: dotpulse 1.2s infinite ease-in-out;
+  /* working indicator: a flipping hourglass. The glass frame rotates
+     end-over-end; the sand pile is gravity-fixed (outside the rotating
+     element) so it always sits in the visual bottom bulb. */
+  .hourglass {
+    display: inline-block; position: relative;
+    width: 16px; height: 24px;
+    margin-left: 8px; vertical-align: -5px;
+    --hg-frame: #6b4a14;   /* bronze glass, wood theme */
+    --hg-sand: #f2cf7c;     /* gold sand */
   }
-  .dots i:nth-child(2) { animation-delay: .2s; }
-  .dots i:nth-child(3) { animation-delay: .4s; }
-  @keyframes dotpulse {
-    0%, 60%, 100% { opacity: .22; transform: translateY(0); }
-    30% { opacity: 1; transform: translateY(-3px); }
+  .hourglass .frame {
+    position: absolute; inset: 0;
+    background: var(--hg-frame);
+    clip-path: polygon(0 0, 100% 0, 50% 50%, 100% 100%, 0 100%);
+    animation: hg-flip 2.6s infinite;
+  }
+  .hourglass .sand {
+    position: absolute; inset: 0;
+    background: var(--hg-sand);
+    clip-path: polygon(50% 54%, 11% 96%, 89% 96%);
+    animation: hg-glint 2.6s infinite;
+  }
+  .hourglass .sand::before {  /* falling stream through the neck */
+    content: ""; position: absolute; left: 50%; top: 10%;
+    height: 42%; width: 2px; margin-left: -1px;
+    background: var(--hg-sand);
+    animation: hg-stream 2.6s infinite;
+  }
+  body.steel .hourglass {
+    --hg-frame: #77879a;    /* pewter glass */
+    --hg-sand: #d7e4ef;     /* silvered sand */
+  }
+  @keyframes hg-flip {
+    0%, 46%   { transform: rotate(0deg); }
+    54%, 96%  { transform: rotate(180deg); }
+    100%      { transform: rotate(360deg); }
+  }
+  @keyframes hg-glint {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.3); }
+  }
+  @keyframes hg-stream {
+    0%, 52%, 100% { opacity: 0; }
+    8%, 44%       { opacity: .9; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .dots i { animation: none; opacity: .6; }
+    .hourglass .frame, .hourglass .sand, .hourglass .sand::before {
+      animation: none;
+    }
+    .hourglass .sand::before { opacity: 0; }
     header button:active, #deckbtn:active,
     #deckpanel .row button.cancel:active,
     form button:active, #gate button:active,
@@ -701,7 +761,7 @@ function setStatus(text, cls, dots) {
   status.className = cls || "";
   if (dots) {
     status.insertAdjacentHTML("beforeend",
-        ' <span class="dots"><i></i><i></i><i></i></span>');
+        ' ' + '<span class="hourglass" role="img" aria-label="working"><i class="frame"></i><i class="sand"></i></span>');
   }
 }
 
@@ -864,7 +924,7 @@ async function ask(question) {
     note("decklist attached: " + deckLines + " lines");
   }
   const answerBox = addBubble(
-      "answer", '<span class="dots"><i></i><i></i><i></i></span>');
+      "answer", '<span class="hourglass" role="img" aria-label="working"><i class="frame"></i><i class="sand"></i></span>');
   let lastEvent = null;
   try {
     const t0 = Date.now();
