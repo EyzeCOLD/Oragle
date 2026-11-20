@@ -224,3 +224,7 @@ Wizards of the Coast; the Comprehensive Rules are published by Wizards
 of the Coast. Card data and symbol art are courtesy of
 [Scryfall](https://scryfall.com) — this project is not affiliated with
 or endorsed by Wizards of the Coast or Scryfall.
+
+The project's own code is licensed under the [MIT License](LICENSE);
+the card data, symbol art, and Comprehensive Rules it downloads are not
+covered by that license.

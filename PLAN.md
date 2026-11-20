@@ -633,7 +633,11 @@ behavior) without breaking this user's own setup:
   conventions captured in AGENTS.md; bench question sets moved to
   dev/ (cmd_bench default resolves ./bench.txt then dev/bench.txt);
   .env.example added and un-ignored; .gitignore gains .pytest_cache/
-  and the !.env.example exception.
+  and the !.env.example exception. LICENSE added after a user-facing
+  rundown of the usual options: MIT chosen (zero-friction, standard
+  for fan tooling), with an explicit note that it covers project code
+  only — the downloaded CR text, card data and Scryfall symbol art
+  stay covered by their own terms.
 
 The design is BYO-endpoint: the project never depended on Mistral
 specifics beyond the named-backend convenience, and detection is now
