@@ -34,7 +34,7 @@ MDFC = {
 
 class NormalizeTest(unittest.TestCase):
     def test_diacritics_case_punct(self):
-        self.assertEqual(normalize_name("Jeska's Will"), "jeska s will")
+        self.assertEqual(normalize_name("Jeska's Will"), "jeskas will")
         self.assertEqual(normalize_name("Lim-Dûl the Necromancer"), "lim dul the necromancer")
         self.assertEqual(normalize_name("  FIRE // ICE  "), "fire ice")
 
@@ -86,8 +86,13 @@ class LookupTest(unittest.TestCase):
     def test_second_face_name(self):
         self.assertEqual(self.lookup("Trench Gnome")["id"], "xyz789")
 
-    def test_fuzzy_word_match(self):
-        self.assertEqual(self.lookup("avuncular gnome")["id"], "xyz789")
+    def test_partial_name_not_found(self):
+        # strict: word/fragment matches are never "fixed" to a card
+        from mtgjudge.cards import CardNotFound
+        with self.assertRaises(CardNotFound):
+            self.lookup("avuncular gnome")
+        with self.assertRaises(CardNotFound):
+            self.lookup("avuncular")
 
     def test_five_word_name_found(self):
         conn = carddb.connect(self.db_file)
@@ -102,17 +107,19 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(self.lookup("Wheel of Sun and Moon")["name"],
                          "Wheel of Sun and Moon")
 
-    def test_single_word_exact_word_match_allowed(self):
-        # "avuncular" is a whole word in a face name -> matches
-        self.assertEqual(self.lookup("avuncular")["id"], "xyz789")
-
     def test_single_word_fragments_rejected(self):
-        # "gnom" is not a whole word anywhere; single-word fuzzy is off
+        # "gnom" is not a whole word anywhere; nothing matches it
         from mtgjudge.cards import CardNotFound
         with self.assertRaises(CardNotFound):
             self.lookup("gnom")
 
-    def test_missing_apostrophe_matches_nospace(self):
+    def test_apostrophe_punctuation_leeway(self):
+        # punctuation maps to spaces on both sides: typed ' == stored '
+        self.assertEqual(self.lookup("Jeska's Will")["id"], "j1")
+
+    def test_missing_apostrophe_matches(self):
+        # apostrophes are deleted (not spaced) when normalizing, so the
+        # user typing "Jeskas Will" finds "Jeska's Will" (2026-11-19)
         self.assertEqual(self.lookup("jeskas will")["id"], "j1")
 
     def test_not_found_raises(self):
@@ -129,6 +136,35 @@ class LookupTest(unittest.TestCase):
         card = carddb._row_to_card(row)
         self.assertEqual(card["name"], "Bemused Avuncular // Trench Gnome")
         self.assertTrue(card["rulings_uri"].endswith("/cards/xyz789/rulings"))
+
+    def test_exact_face_beats_popular_prefix_match(self):
+        # live-2026-11-19 bug: "Mountain" resolved to "Mountain Valley"
+        # because the padded word match also hits name prefixes and
+        # edhrec popularity put ranked cards above NULL-ranked basics.
+        # Tier 0 (exact face name) must win.
+        conn = carddb.connect(self.db_file)
+        carddb._insert_cards(conn, [
+            _bulk_row_from_card({"id": "mtn", "name": "Mountain",
+                                 "layout": "normal", "card_faces": [],
+                                 "mana_cost": "", "type_line": "Basic Land — Mountain",
+                                 "oracle_text": "{T}: Add {R}.",
+                                 "released_at": "1993-08-05"}),
+            _bulk_row_from_card({"id": "mtv", "name": "Mountain Valley",
+                                 "layout": "normal", "card_faces": [],
+                                 "mana_cost": "", "type_line": "Land",
+                                 "oracle_text": "", "released_at": "1996-10-01",
+                                 "edhrec_rank": 4999}),
+        ])
+        conn.commit()
+        conn.close()
+        self.assertEqual(self.lookup("Mountain")["id"], "mtn")
+        # exact names are not ambiguous: no disambiguation candidate list
+        alts = carddb.lookup_alternates("Mountain", db_file=self.db_file)
+        self.assertEqual([a["id"] for a in alts], ["mtn"])
+        # singular miss -> "did you mean": edit distance finds the typo
+        alts = carddb.lookup_alternates("Mountan", db_file=self.db_file)
+        self.assertEqual([a["id"] for a in alts], ["mtn"])
+        self.assertEqual(alts[0]["name"], "Mountain")
 
 
 class ReimportTest(unittest.TestCase):
@@ -166,7 +202,8 @@ class RulingsCacheTest(unittest.TestCase):
         conn.close()
 
     def test_cached_ruling_returned_offline(self):
-        card = carddb.lookup_card("Zndrsplt", offline=True, db_file=self.db_file)
+        card = carddb.lookup_card("Zndrsplt, Eye of Wisdom", offline=True,
+                                  db_file=self.db_file)
         rulings = carddb.get_rulings(card, offline=True, db_file=self.db_file)
         self.assertEqual(len(rulings), 1)
         self.assertEqual(rulings[0]["comment"], "A ruling.")
@@ -205,20 +242,32 @@ class LookupAlternatesTest(unittest.TestCase):
     def test_ambiguous_name_lists_candidates(self):
         alts = carddb.lookup_alternates("Selvala", db_file=self.db_file)
         names = [a["name"] for a in alts]
-        self.assertEqual(len(names), 3)
+        # "Selvala's Charge" is NOT a candidate anymore: the apostrophe
+        # normalizes away, so "selvalas" is a different word than
+        # "selvala". The two legendary Selvalas are what's meant by
+        # [[Selvala]].
+        self.assertEqual(len(names), 2)
+        self.assertIn("Selvala, Eager Trailblazer", names)
         self.assertIn("Selvala, Explorer Returned", names)
-        # no duplicates, all share the word
-        self.assertEqual(len(set(names)), 3)
 
     def test_unique_name_single_candidate(self):
         alts = carddb.lookup_alternates("lightning helix", db_file=self.db_file)
         self.assertEqual([a["id"] for a in alts], ["lh"])
 
-    def test_first_candidate_matches_lookup(self):
-        # the disambiguation prompt needs alternates[0] == lookup_card
-        lookup = carddb.lookup_card("Selvala", offline=True, db_file=self.db_file)
+    def test_strict_lookup_reports_not_found(self):
+        # lookup never guesses; ambiguous/disambiguated names raise.
+        # The interactive chooser works off the alternates list instead.
+        from mtgjudge.cards import CardNotFound
+        with self.assertRaises(CardNotFound):
+            carddb.lookup_card("Selvala", offline=True, db_file=self.db_file)
         alts = carddb.lookup_alternates("Selvala", db_file=self.db_file)
-        self.assertEqual(alts[0]["id"], lookup["id"])
+        self.assertEqual(len(alts), 2)
+
+    def test_typo_falls_back_to_close_matches(self):
+        # word-match finds nothing for a misspelling; the edit-distance
+        # pass suggests the real card for the "did you mean" notice
+        alts = carddb.lookup_alternates("Lighting Helix", db_file=self.db_file)
+        self.assertEqual([a["id"] for a in alts], ["lh"])
 
     def test_missing_db_gives_no_alternates(self):
         with tempfile.TemporaryDirectory() as tmp:

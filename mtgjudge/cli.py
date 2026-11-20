@@ -17,7 +17,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import carddb, cards, cr, envfile, llm, net, search, store
+from . import carddb, cards, cr, deck, envfile, llm, net, search, store
 from . import ansi
 from .spinner import Spinner
 
@@ -140,8 +140,10 @@ Answering rules:
 - The rules excerpts are from the Comprehensive Rules, effective {date}.
 - If the user asks which cards exist or meet some criteria (mana value, color, format legality, oracle text containing something), use the search_cards tool with a Scryfall syntax query instead of answering from memory. Examples: color<=2 colors:blue oracle:"exile target creature". Format-legal questions use legal:pauper / legal:modern / etc.
 - Card references the user intended arrive as blocks titled CARD <name>. A card name in the question without such a block has NOT been resolved: use the search_cards tool with an exact-name query (e.g. !"Lightning Helix") to fetch its Oracle text, then answer grounded in the returned text. Never describe a card's printed text from memory.
+- A CARD block reading NOT FOUND means no card has that exact name. Say it was not found and, if similar card names are listed in the block, offer them to the user — do not answer as though any of them had been resolved.
 - If part of the question involves rules NOT present in the context blocks (e.g. the legend rule for two copies of a legendary card, or how hybrid mana symbols determine color), do not fill the gap from memory: use the search_rules tool with rule keywords (e.g. "legendary permanent same name" or "hybrid mana symbol colors") to fetch the relevant rules, then answer citing them.
 - The conversation may include earlier turns; use them only to resolve references in the current question (e.g. "what about two headed giant?" refers to the earlier topic). Earlier turns never justify claims on their own: every statement in your answer must still be grounded in the current context blocks and cited, or met with "This is not covered in the retrieved rules."
+- A pasted decklist arrives as CARD blocks noting copies "in the decklist". Answer rules questions about its composition (interactions, combos, legality, what happens when its cards meet) with citations as usual. You are NOT a deck advisor: for evaluation or improvement questions ("is this deck good", "what should I cut", "what would make this competitive") say briefly that you are a rules judge without a metagame model, so you cannot rank or suggest strategies or cards outside the provided context, and offer the rules-grounded part if one exists.
 """
 
 SEARCH_CARDS_TOOL = {
@@ -224,7 +226,7 @@ EXACT_QUERY_RE = re.compile(r'^!\s*"([^"]+)"|^!\s*(\S+)$')
 # work. Point it out politely: once per answer, interactive stderr
 # only, never for names already resolved via [[Name]].
 UNBRACKETED_HINT = ("please surround card names such as [[{name}]] with "
-                    "brackets for faster lookup")
+                    "brackets for an exact lookup")
 
 
 def _exact_card_query(query):
@@ -235,23 +237,29 @@ def _exact_card_query(query):
     return (m.group(1) or m.group(2) or "").strip() or None
 
 
-def make_tool_runner(chunks, referenced=()):
+def make_tool_runner(chunks, referenced=(), emit=None):
     """Runs both model tools: search_cards (Scryfall, online) and
     search_rules (local BM25 over the Comprehensive Rules).
     `referenced` names (cards already resolved from [[ ]] refs) suppress
-    the unbracketed-name hint."""
+    the unbracketed-name hint. `emit` (used by the web server) receives
+    the hint as an event instead of terminal stderr."""
 
     referenced_names = {carddb.normalize_name(n) for n in referenced}
     hinted = {"done": False}
 
     def hint(name):
-        if hinted["done"] or not sys.stderr.isatty():
+        if hinted["done"]:
             return
         if carddb.normalize_name(name) in referenced_names:
             return  # the user did bracket this one
         hinted["done"] = True
-        print("  " + ansi.styled(UNBRACKETED_HINT.format(name=name),
-                                 ansi.YELLOW),
+        text = UNBRACKETED_HINT.format(name=name)
+        if emit is not None:
+            emit(text)  # non-terminal frontend: always delivered
+            return
+        if not sys.stderr.isatty():
+            return
+        print("  " + ansi.styled(text, ansi.YELLOW),
               file=sys.stderr, flush=True)
 
     def runner(name, args):
@@ -321,32 +329,74 @@ def _choose_card(word, default, alternates, prompt=input):
     return default
 
 
-def _card_blocks(chunks, question, offline=False, interactive=False):
+def _card_blocks(chunks, question, offline=False, interactive=False,
+                 emit=None):
     """Resolve cards for a question. References are explicit only:
-    [[Name]]. (Automatic detection of capitalized plain words was removed
+    [[Name]] (automatic detection of capitalized plain words was removed
     — telling a card name from prose was too finicky; an unbracketed
-    name is the model's job, resolved with the search_cards tool.)
-    Ambiguous refs like [[Selvala]] prompt interactively. Returns
-    (release_question, blocks); release_question keeps the card names
-    as plain words for the rules search."""
+    name is the model's job, resolved with the search_cards tool).
+    A pasted decklist is the other trigger: mtgjudge/deck.py pulls it
+    out of the question and every card becomes a CARD block in one
+    deterministic pass. Ambiguous refs like [[Selvala]] prompt
+    interactively. Returns (release_question, blocks); release_question
+    keeps the card names as plain words for the rules search. `emit`
+    (web) receives the progress notes instead of stderr."""
+    note = emit or (lambda msg: print(msg, file=sys.stderr, flush=True))
     blocks = []
+    # decklist first: a pasted deck is pulled out of the question and its
+    # cards resolved here (CARD blocks, no rulings/keyword rules — the
+    # model can search those if needed; rulings for 60 cards would bloat
+    # the prompt and cost one Scryfall fetch each)
+    deck_entries, question = deck.extract_deck(question)
+    deck_cards = {}
+    if deck_entries:
+        missed = []
+        for count, name in deck_entries:
+            if len(deck_cards) >= MAX_DECK_CARDS:
+                missed.append("(truncated)")
+                break
+            try:
+                card = carddb.lookup_card(name, offline=offline)
+            except cards.CardNotFound:
+                alt = carddb.lookup_alternates(name, limit=5)
+                label = name
+                if len(alt) == 1:
+                    label += f" (did you mean {alt[0]['name']}?)"
+                missed.append(label)
+                continue
+            deck_cards[card["id"]] = card, count
+        for card, count in deck_cards.values():
+            blocks.append(
+                f"CARD {card['name']}\n"
+                f"{count} cop{'y' if count == 1 else 'ies'} in the decklist\n"
+                f"{cards.format_card(card)}")
+        note(f"decklist parsed: {len(deck_cards)} cards resolved"
+             + (f", not found: {', '.join(missed[:8])}" if missed else ""))
     explicit, cleaned = cards.extract_card_refs(question)
-    seen = set()
+    seen = set(deck_cards)  # deck cards count as referenced
     referenced = []
     for name in explicit:
         try:
             card = carddb.lookup_card(name, offline=offline)
         except cards.CardNotFound as e:
-            print(f"warning: {e}", file=sys.stderr)
-            blocks.append(f"CARD {name}\nNOT FOUND (local database and Scryfall).")
-            continue
-        if interactive:
             alternates = carddb.lookup_alternates(name, limit=5)
-            if len(alternates) > 1:
+            if interactive and len(alternates) > 1:
                 chosen = _choose_card(name, alternates[0], alternates[1:5])
                 if chosen is None:
                     continue  # user said this isn't a card reference
                 card = chosen
+            else:
+                note(f"warning: {e}")
+                block = (f"CARD {name}\nNOT FOUND: no card with this exact "
+                        f"name (local database and Scryfall).")
+                if len(alternates) == 1:
+                    block += f" Did you mean: {alternates[0]['name']}?"
+                elif alternates:
+                    block += ("\nDid you mean one of: "
+                              + ", ".join(a["name"] for a in alternates[:4])
+                              + "?")
+                blocks.append(block)
+                continue
         if card["id"] in seen:
             continue
         seen.add(card["id"])
@@ -357,7 +407,7 @@ def _card_blocks(chunks, question, offline=False, interactive=False):
         if rulings_text:
             blocks.append(f"OFFICIAL RULINGS for {card['name']}\n{rulings_text}")
     if referenced:
-        print("cards referenced: " + ", ".join(c["name"] for c in referenced), file=sys.stderr)
+        note("cards referenced: " + ", ".join(c["name"] for c in referenced))
         oracle = " ".join(c.get("oracle_text", "") or "" for c in referenced)
         for kw_name, rule_num in cr.keyword_abilities(chunks).items():
             if re.search(rf"\b{re.escape(kw_name)}\b", oracle, re.IGNORECASE):
@@ -468,8 +518,34 @@ def _make_stream_printer(card_names, spin):
     return hook, finish, _mark_printed
 
 
+def _make_line_collector(line_sink):
+    """Stream-to-lines adapter for non-terminal frontends (the web
+    server): raw, unstyled text, one line_sink call per complete line."""
+    buf = []
+
+    def hook(delta):
+        buf.append(delta)
+        if "\n" in delta:
+            pending = "".join(buf)
+            buf.clear()
+            lines = pending.split("\n")
+            buf.append(lines.pop())
+            for line in lines:
+                line_sink(line)
+
+    def finish():
+        if buf:
+            line_sink("".join(buf))
+            buf.clear()
+
+    return hook, finish
+
+
 RULE_REF_RE = re.compile(r"rules?\s+(\d{3}\.\d{1,3}[a-z]{0,2})")
 MAX_HOP_RULES = 6
+# Decklist cards turned into CARD blocks per question; beyond this the
+# prompt would balloon (60 blocks of oracle text ~ 15k chars).
+MAX_DECK_CARDS = 60
 # Earlier turns' context blocks carried into later questions, capped so a
 # long session cannot grow the prompt without bound.
 MAX_SESSION_BLOCKS = 40
@@ -482,14 +558,19 @@ GOLDEN_ANCHORS = ("101.1", "101.2")
 
 def answer_question(question, top=8, offline=False, backend=None, model=None,
                     spinner=None, interactive=False, stream_output=False,
-                    history=None, prior_blocks=None):
+                    history=None, prior_blocks=None, line_sink=None,
+                    emit=None):
     """One full `ask` pipeline run. Returns a result dict; used by the ask,
-    bench, and interactive commands. Progress goes to stderr (or the given
-    spinner). stream_output prints the answer live, line by line."""
+    bench, interactive, and web-server commands. Progress goes to stderr
+    (or the given spinner). stream_output prints the answer live, line by
+    line; line_sink (non-terminal frontends like the web server) receives
+    raw streamed lines instead. emit receives the progress notes
+    (status lines, hints) that would otherwise go to stderr."""
     start = time.time()
     meta, chunks = store.load_rules()
+    note = emit or (lambda msg: print(msg, file=sys.stderr, flush=True))
     cleaned, blocks = _card_blocks(chunks, question, offline=offline,
-                                   interactive=interactive)
+                                   interactive=interactive, emit=emit)
     cleaned = cleaned or question
 
     seen = set()
@@ -570,9 +651,8 @@ def answer_question(question, top=8, offline=False, backend=None, model=None,
                   if anchor_numbers else "")
     if history and carried:
         anchor_note += f", {carried} carried"
-    print(f"→ {n_rules} rules ({hops} via citations{anchor_note}), "
-          f"{n_cards} cards, {n_rulings} ruling sets in context",
-          file=sys.stderr, flush=True)
+    note(f"→ {n_rules} rules ({hops} via citations{anchor_note}), "
+         f"{n_cards} cards, {n_rulings} ruling sets in context")
 
     backend = backend or llm.resolve_backend()
     model = model or llm.default_model(backend)
@@ -582,10 +662,13 @@ def answer_question(question, top=8, offline=False, backend=None, model=None,
         tools.append(SEARCH_CARDS_TOOL)
     card_names = re.findall(r"^CARD (.+)$",
                             "\n".join(blocks), re.MULTILINE)
-    tool_runner = make_tool_runner(chunks, referenced=card_names)
+    tool_runner = make_tool_runner(chunks, referenced=card_names,
+                                   emit=emit)
     stream_hook, stream_finish, stream_mark = (
         _make_stream_printer(card_names, spin) if stream_output
         else (None, None, None))
+    if line_sink is not None:
+        stream_hook, stream_finish = _make_line_collector(line_sink)
     slow_after, fallback_model = _watchdog_settings(backend)
     stats = {}
     spin.start(f"asking {backend} ({model})")
@@ -599,7 +682,9 @@ def answer_question(question, top=8, offline=False, backend=None, model=None,
             progress=spin.note,
             stream=stream_hook, stats=stats,
             fallback_model=(fallback_model or None),
-            first_answer_deadline=(slow_after if stream_output and slow_after
+            first_answer_deadline=(slow_after
+                                   if (stream_output or line_sink
+                                       is not None) and slow_after
                                    else None),
             history=history,
         )
@@ -608,9 +693,9 @@ def answer_question(question, top=8, offline=False, backend=None, model=None,
         if stream_hook:
             streamed_live = stream_finish()
     total = time.time() - start
-    print(f"→ done: {stats.get('rounds', 1)} model round(s), "
-          f"{stats.get('model_seconds', 0):.0f}s model time, "
-          f"{total:.1f}s total", file=sys.stderr, flush=True)
+    note(f"→ done: {stats.get('rounds', 1)} model round(s), "
+         f"{stats.get('model_seconds', 0):.0f}s model time, "
+         f"{total:.1f}s total")
     return {
         "answer": answer,
         "backend": backend,
@@ -876,6 +961,24 @@ def bare_exit(line):
     return bool(BARE_EXIT_RE.match(line.strip()))
 
 
+def record_turn(state, question, res):
+    """Store one answered turn into session state: history replay for
+    follow-ups plus carried context blocks, deduped and capped. Shared
+    by the REPL state and the web server's conversation threads."""
+    history = state.setdefault("history", [])
+    history.append({"role": "user", "content": question})
+    history.append({"role": "assistant", "content": res["answer"]})
+    del history[:-12]
+    merged, heads = [], set()
+    for b in [*state.get("prior_blocks", []), *res.get("blocks", [])]:
+        head = b.splitlines()[0]
+        if head in heads:
+            continue
+        heads.add(head)
+        merged.append(b)
+    state["prior_blocks"] = merged[-MAX_SESSION_BLOCKS:]
+
+
 def _repl_answer(question, state, interactive):
     """Run the ask pipeline for one REPL line. On success the question,
     answer, and retrieved context carry over to later questions."""
@@ -900,18 +1003,7 @@ def _repl_answer(question, state, interactive):
     _print_answer(res, verbose=state["verbose"])
     # Conversation memory: replay of grounded turns + carried blocks.
     # Keep the last few messages; llm.ask_llm caps the list again.
-    history = state.setdefault("history", [])
-    history.append({"role": "user", "content": question})
-    history.append({"role": "assistant", "content": res["answer"]})
-    del history[:-12]
-    merged, heads = [], set()
-    for b in [*state.get("prior_blocks", []), *res.get("blocks", [])]:
-        head = b.splitlines()[0]
-        if head in heads:
-            continue
-        heads.add(head)
-        merged.append(b)
-    state["prior_blocks"] = merged[-MAX_SESSION_BLOCKS:]
+    record_turn(state, question, res)
     if interactive:
         # the default after an answer is to keep every earlier turn and
         # block in scope — useful for follow-ups, expensive and muddy
@@ -1021,6 +1113,13 @@ def cmd_repl(args):
             print("(interrupted)")
 
 
+def cmd_serve(args):
+    """Run the web app: local HTTP server speaking the same pipeline as
+    the CLI (see mtgjudge/server.py)."""
+    from mtgjudge import server  # deferred: only needed for `serve`
+    return server.main(args)
+
+
 def main(argv=None):
     envfile.load_env()  # .env files: real environment always wins
     parser = argparse.ArgumentParser(
@@ -1079,6 +1178,18 @@ def main(argv=None):
     p.add_argument("--model", help="model override (or MTG_MODEL env)")
     p.add_argument("--offline", action="store_true")
     p.set_defaults(func=cmd_bench)
+
+    p = sub.add_parser("serve", help="run the web app (HTTP server + frontend)")
+    p.add_argument("--port", type=int, default=None,
+                   help="port to listen on (default: PORT env, else 10000)")
+    p.add_argument("--host", default="127.0.0.1",
+                   help="bind address (use 0.0.0.0 in a container)")
+    p.add_argument("--auth-token", default=None,
+                   help="bearer token (default: WEB_TOKEN env)")
+    p.add_argument("--backend", choices=["mistral", "lmstudio", "ollama"])
+    p.add_argument("--offline", action="store_true",
+                   help="cards from local DB only, skip freshness check")
+    p.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)
     if args.command is None:  # bare `oragle` -> interactive session

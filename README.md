@@ -37,7 +37,36 @@ oragle card "Lightning Helix"           # local DB: oracle text + rulings
 oragle card "Lightning Helix" --offline # no network at all
 oragle ask "do blockers assign damage before attackers?" -v
 oragle                                  # interactive session (REPL)
+oragle serve                            # web app on http://127.0.0.1:10000
 ```
+
+## Web app (`serve`)
+
+`oragle serve` runs the same engine as the CLI behind a small stdlib HTTP
+server, with a mobile-friendly chat page (`mtgjudge/web/index.html`)
+served from the same origin:
+
+```sh
+echo 'WEB_TOKEN=pick-a-long-random-string' >> .env
+oragle serve                        # binds 127.0.0.1:10000
+open http://127.0.0.1:10000         # paste the token once; it stays in localStorage
+```
+
+Parity with the CLI: same retrieval, conversation memory (threads map to
+REPL sessions; the New-thread button is `:new`), `[[Name]]` card refs,
+progress notes, and both hint lines. Rule numbers in answers are links
+that expand the rule text from the local index; card names link to
+Scryfall. Extra endpoints: `GET /rule?number=`, `GET /search?q=`,
+`GET /card?name=` (the `:rule`/`:search`/`:card` commands over HTTP).
+
+Deploy (Render free tier, see PLAN.md for the constraints that shaped
+this): the Dockerfile bakes `rules.json` + `cards.db` into the image via
+the normal `refresh` at build time; secrets (`MISTRAL_API_KEY`,
+`WEB_TOKEN`) are Render env vars, never in the image or git. Requests
+are kept short (`POST /ask` returns a job id immediately; the browser
+polls `GET /job/{id}`) because Render's proxy cuts requests off around
+15-60 s while answers take 10-90 s. The page detects the free-tier
+wake-up (sleeps after 15 min idle) via `/health` and says so.
 
 ## Interactive mode
 
@@ -101,6 +130,35 @@ oragle ask "does [[Lightning Helix]] kill [[Grizzly Bears]]?"
 Card Oracle text, its Scryfall rulings, and the rules for any keyword
 abilities in the card text (derived from rule 702 headers) are added to the
 retrieved context automatically.
+
+### Decklists
+
+Paste a decklist into the question (or use the web **Deck** button) and
+every card is resolved locally in one deterministic pass — the model gets
+all the Oracle text immediately instead of fetching cards one by one:
+
+```sh
+oragle ask "$(printf 'any infinite combos?\n4 Priest of Titania\n20 Mountain (ROE) 187\nStaff of Domination x1\n')"
+```
+
+Recognized formats: `4 Card` / `4x Card` / `Card x4` counts, MTGO/Scryfall
+set suffixes (`(ROE) 187`, `[ARB] #45`), `//`/`#` comments (line-leading
+only — `Brazen Borrower // Petty Theft` split names are untouched),
+and Arena-style `Deck` / `Commander` / `Sideboard` headers. Detection is
+conservative without markers — three or more counted lines — so ordinary
+questions are never mistaken for a deck; `<deck>...</deck>` markers
+force it (the web button emits them). Each card becomes a `CARD` block
+noting its copies; unresolved names are reported as progress notes.
+Decks cap at 60 unique cards (prompt size); rulings and keyword-rule
+expansion stay reserved for single `[[Name]]` refs, not deck entries.
+
+**What this is for:** rules questions grounded in a list's composition —
+"does this go infinite?", "does anything here loop", "which of these
+interactions breaks the legend rule". It is not a deck advisor: the bot
+has no metagame model, can't rank cards, and can't suggest cards that
+aren't in front of it, so strategy questions get the usual "not covered
+in the retrieved rules" honesty. A real deck analyzer (metagame data,
+context on why cards are played) is a different project entirely.
 
 **Card references are explicit only.** Capitalized words are never
 auto-detected as cards — early versions did that and could not reliably

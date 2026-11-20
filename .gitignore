@@ -12,3 +12,7 @@ build/
 
 # Downloaded data
 data/
+
+# Generated bench reports (rewritten by every `oragle bench` run)
+bench-last.md
+bench*-last.md

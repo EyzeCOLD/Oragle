@@ -161,42 +161,125 @@ in context (Lightning Helix vs. Squee / Grizzly Bears queries).
 - Layer/stack system (613, 405) special handling — hardest, save for last
 - Web UI, MCP server / editor integration instead of CLI
 
-## Web remote access (plan, not built)
+## Web remote access (decided 2026-11-19, build started same day)
 
 Goal: ask rules questions from the phone, PC off, using my own Mistral
 budget. The pipeline (BM25 retrieval, card DB, tool loop, key) must run
 somewhere — GitHub Pages can't do it.
 
-Architecture: small stdlib HTTP server (`server.py`) wrapping
-`answer_question()` directly (it already returns answer + context ids):
+Locked decisions (user):
 
-- `POST /ask {"question": ...}` -> `{"answer", "context_ids", "elapsed"}`;
-  single origin also serves a one-page frontend (no CORS, no Pages needed).
-- Data deployed with the container: `rules.json` + `cards.db`
-  (or first-boot `refresh`).
-- Auth: bearer token in a header (the endpoint fronts my Mistral key);
-  long request timeout, streaming or spinner-equivalent ping so the phone
-  UI shows churn during 10-90 s answers.
-- Hosting options, in order of preference: Cloud Run (per-request billing,
-  effectively free at personal volume) > Hetzner/Oracle always-on VM >
-  Raspberry Pi at home behind Tailscale (zero public exposure, no auth
-  needed). Dockerfile + deploy config; no runtime deps to install.
+- **Host: Render free tier** (user already has an account). Limits that
+  shaped the design, verified 2026-11-19: sleeps after 15 min idle
+  (wake ~1 min), per-request proxy timeout roughly 15-60 s, 512 MB RAM
+  (cards.db 30 MB fits), 750 instance-hours/month (~744 hours in a
+  month, so even a keep-alive pinger fits). Unlike Vercel functions the
+  container survives BETWEEN requests, so background work + polling is
+  viable; Vercel kills the process with the request, nothing survives.
+- **No persistent history**: conversations live in server memory, gone
+  on restart or spin-down. Matches CLI behavior (REPL forgets on exit).
+- **Short-request + polling**, not one long streaming request: POST /ask
+  returns a job id immediately; the answer runs in a background thread;
+  GET /job/{id} returns the lines so far. Every request finishes in
+  milliseconds, safely inside the proxy timeout. The wake-up delay is
+  communicated in the UI via a /health check ("server waking up — takes
+  about a minute, Render free sleeps after 15 min").
+- **Data baked into the Docker image**, NOT the git repo (30 MB cards.db
+  in git chokes clones): the image build runs the existing refresh code,
+  data lands at /data via MTG_DATA_DIR. Server needs no Scryfall at
+  runtime; the API key stays out of the image (Render env var).
+- **Stdlib server** (http.server + threading), consistent with the
+  zero-dependency CLI; `oragle serve` subcommand, same engine as the CLI.
+- Auth: bearer token (env WEB_TOKEN) — the endpoint fronts the Mistral
+  key. Frontend stores it in localStorage and sends Authorization
+  headers.
 
-Frontend ideas (when served as HTML, cheap wins over terminal output):
+Architecture principle: ONE engine (mtgjudge package), interchangeable
+frontends; feature logic lives in the core, frontends render.
+answer_question() already serves ask/bench/REPL — the server drives the
+same core (history=/prior_blocks= give the web conversation memory).
+Disambiguation on web takes the default (like piped runs) for v1; the
+terminal keeps the live prompt. Old hosting-preference list (Cloud Run >
+Hetzner > Pi+Tailscale) is superseded; if Render annoys later, moving is
+a redeploy, not a rewrite.
 
-- Card names in answers link to Scryfall (`scryfall.com/card/<set>/<num>`,
-  or the `scryfall_uri` fetched at lookup time; store it in cards.db or
-  use `scryfall.com/search?q=!"<name>"` as a lazy fallback).
-- Rule-number citations become links: `#702.2b` view showing the rule
-  block (already available from the local index — endpoint or client-side
-  from the JSON).
-- Collapse/show official rulings per card on tap; show which rulings the
-  answer relied on.
-- History of recent questions in localStorage; PWA manifest so it installs
-  to the home screen.
+Frontend ideas (served by the same origin, no CORS):
+
+- Card names in answers link to Scryfall (scryfall.com/search?q=!"name").
+- Rule-number citations are links that expand the rule block via a
+  /rule endpoint (local index, no network).
+- Collapse/show official rulings per card on tap.
+- PWA manifest so it installs to the phone home screen.
+
+Chat autoscroll (regression fixed 2026-11-19, reproduced headless via
+CDP against a fake-pipeline server): the follow logic broke on the
+first streamed chunk — scrollDown() measured isNearBottom() AFTER the
+innerHTML swap, and a chunk taller than the 140px threshold (or the
+whole non-streamed answer in one swap) looked like the reader had
+scrolled up, so follow mode never re-engaged and the final answer
+appeared without the view following. Invariant, now documented at
+scrollDown: every caller that grows the chat (stream swaps, the done
+swap, threadbar, ruleboxes) snapshots isNearBottom() BEFORE the
+mutation and forces the scroll after it. Verified both ways: at-bottom
+follows the answer to the pixel; scrolled up mid-answer stays put.
+
+Decklists (2026-11-19, user request "interesting, unsure how helpful"):
+mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO
+exports, "N Card"/"Nx"/"xN" counts, set suffixes, comments, SECTION
+headers; conservative >= 3 counted lines without markers) and
+_card_blocks turns each card into a CARD block with its copy count in
+one local pass — the model skips its per-card search_cards rounds
+entirely. Question text keeps only a "(decklist: N cards)" summary so
+BM25 is not drowned in card names. Cap 60 unique cards (prompt size);
+rulings and keyword-rule expansion excluded for deck entries (one
+Scryfall fetch per card, and 50+ rule blocks, would bloat the prompt).
+Web: "Deck" chip in the composer opens a paste panel; the deck rides
+with the next question wrapped in <deck>...</deck> markers (guaranteed
+detection, immune to the heuristic). "//" comments are line-leading
+only (MTGO export convention) — split names like "Brazen Borrower //
+Petty Theft" are unaffected, covered by tests. Scope (user, 2026-11-19):
+this exists for rules questions about a list's composition (infinite
+combos, legend-rule collisions, loops), NOT deck evaluation — the bot
+has no metagame model and can't suggest cards outside its context; a
+real deck analyzer (metagame data, why cards are played) is explicitly
+a different project. Verified live: Priest of
+Titania/Staff combo question answered from the CARD blocks directly,
+copy counts reasoned over ("4 Priests max, engine needs 5+ elves"), one
+focused search_rules round, no per-card fetches. Note for deploys:
+Python loads once per process — serving rereads index.html by mtime but
+new Python requires a restart/redeploy (bit us locally: a two-hour-old
+server silently ignored the new feature).
+
+Card lookup tier-0 (2026-11-19, deck live-testing followup): pasting
+decklists exposed basics misresolving — "20 Mountain (ROE) 187" matched
+"Mountain Valley" because the padded word match hit name prefixes and
+the popularity ranking put EDHREC-ranked cards above NULL-ranked
+basics. lookup_card now runs an exact-face SQL match first (whole face
+in the single-space-padded, double-space-separated lookup_all), before
+the word-match and fuzzy tiers. Deck exports therefore resolve
+literally with no special-casing — the same tier-0 that makes [[X]]
+refs exact. Covered by test_exact_face_beats_popular_prefix_match.
+
+Strict lookup + did-you-mean (2026-11-19, user decision): card names
+are never silently "fixed" to other cards. lookup_card is exact-face
+only (normalize_name leeway: case, surrounding whitespace, accents —
+NFKD strip, dashes/commas/apostrophes); apostrophes are DELETED when
+normalizing ("Jeskas Will" == "Jeska's Will") — this changed the stored
+lookup_all shape, so the local DB needed a `refresh cards` re-import
+(the suggestion cache keys on file mtime, so it rebuilds automatically).
+Scryfall live fallback uses exact=true. Explicit misses surface as
+"NOT FOUND: no card with this exact name", with "Did you mean: X?" /
+"Did you mean one of: ..." from two passes in lookup_alternates:
+sub-name word results ([[Selvala]] -> the legendary Selvalas) then a
+difflib close-match pass ([[Lighting Helix]] -> Lightning Helix,
+conservative 0.85 cutoff, 3 max; the face list is cached per DB mtime
+since misses cluster). Interactive keeps the numbered chooser for
+multiply-ambiguous refs only. Decklist misses annotate the note
+("not found: Mountan (did you mean Mountain?)"). Side effect of the
+apostrophe rule: [[Selvala]] no longer offers "Selvala's Charge"
+("selvalas" is a different word than "selvala") — considered correct.
 
 ---
-
 ## Bench (bench.txt, bench2.txt)
 
 bench.txt: six target questions, run with `mtg bench` (report:

@@ -1,0 +1,9 @@
+.git
+.venv
+data
+.env
+*.md.bak
+bench-last.md
+bench2-last.md
+mtg_rules_judge.egg-info
+__pycache__

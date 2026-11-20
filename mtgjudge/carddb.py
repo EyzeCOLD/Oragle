@@ -10,6 +10,7 @@ bulk dump (jsonl.gz, ~25 MB download, one row per Oracle id).
   ignored (offline use is the point of the DB).
 """
 
+import difflib
 import gzip
 import io
 import json
@@ -60,6 +61,11 @@ CREATE TABLE IF NOT EXISTS rulings (
 def normalize_name(s):
     s = unicodedata.normalize("NFKD", s)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    # Apostrophes are deleted (their halves join): "Jeska's Will" and
+    # "Jeskas Will" normalize identically. The other separators below
+    # become spaces instead, and that breaks the misspelled-apostrophe
+    # spelling, so they get special treatment first.
+    s = s.replace("'", "").replace("\u2019", "")
     s = re.sub(r"[^a-z0-9]+", " ", s.lower())
     return s.strip()
 
@@ -188,13 +194,32 @@ def _set_meta(conn, key, value):
     conn.commit()
 
 
-_LOOKUP_ORDER = ("(layout IN (?, ?, ?, ?, ?, ?, ?)), (edhrec_rank IS NULL), "
-                 "edhrec_rank, length(lookup_all)")
+_NON_PAPER_SQL = "(" + ", ".join("?" * len(NON_PAPER_LAYOUTS)) + ")"
+_LOOKUP_ORDER = "(edhrec_rank IS NULL), edhrec_rank, length(lookup_all)"
+
+
+def _exact_face_rows(conn, name, limit=1):
+    """Rows whose face name is exactly the (normalized) query. Faces in
+    lookup_all are space-padded and double-space separated, so a face
+    match is: the whole string, or delimited by double spaces."""
+    q = normalize_name(name)
+    return conn.execute(
+        f"SELECT * FROM cards WHERE (lookup_all = ' ' || ? || ' '"
+        f" OR lookup_all LIKE (' ' || ? || '  %')"
+        f" OR lookup_all LIKE ('%  ' || ? || '  %')"
+        f" OR lookup_all LIKE ('%  ' || ? || ' '))"
+        f" AND layout NOT IN {_NON_PAPER_SQL}"
+        f" ORDER BY {_LOOKUP_ORDER} LIMIT ?",
+        (q, q, q, q, *NON_PAPER_LAYOUTS, limit),
+    ).fetchall()
 
 
 def lookup_card(name, offline=False, db_file=None):
     """Local DB first (fast, offline-safe); Scryfall live as fallback for
-    cards newer than the last bulk import."""
+    cards newer than the last bulk import. Strict by design: only an
+    exact face name matches (normalize_name handles case, whitespace,
+    accents and punctuation) — anything else is reported not found
+    instead of silently resolved to a different card."""
     if (db_file or DB_FILE).exists():
         conn = connect(db_file)
         try:
@@ -208,42 +233,61 @@ def lookup_card(name, offline=False, db_file=None):
             f"'{name}' not found in the local card database (run without "
             "--offline to fetch from Scryfall, or `mtg refresh cards`)."
         )
-    return cards.fetch_card(name)
+    return cards.fetch_card(name, exact=True)
 
 
 def _lookup_local(conn, name):
-    q = normalize_name(name)
-    exact = conn.execute(
-        f"SELECT * FROM cards WHERE lookup_all LIKE ? ORDER BY {_LOOKUP_ORDER} LIMIT 1",
-        (f"% {q} %", *NON_PAPER_LAYOUTS),
-    ).fetchone()
-    if exact:
-        return exact
-    words = normalize_name(name).split()
-    if not words or len(words) < 2:
-        # Single-word fuzzy matches are too promiscuous locally;
-        # fall through to Scryfall's smarter fuzzy search instead.
-        return None
-    where = " AND ".join(
-        "(lookup_all LIKE ? OR nospace LIKE ? OR nospace LIKE ?)" for _ in words
-    )
-    params = []
-    for w in words:
-        params.extend([f"% {w} %", f"%{w}%", f"%{w}%"])
-    rows = conn.execute(
-        f"SELECT * FROM cards WHERE {where} ORDER BY {_LOOKUP_ORDER} LIMIT 25",
-        (*params, *NON_PAPER_LAYOUTS),
-    ).fetchall()
+    # Strict: only a face named exactly this (after normalize_name leeway:
+    # case, surrounding whitespace, accents, dashes, commas, apostrophes —
+    # "Troll of Khazad Dum" finds "Troll of Khazad-dûm"). Prefix and word
+    # matches silently "fixed" names before ("Mountain" -> "Mountain
+    # Valley", "avuncular gnome" -> "Trench Gnome"); user decision
+    # 2026-11-19: never guess — an unknown name is reported as not found.
+    rows = _exact_face_rows(conn, name)
     return rows[0] if rows else None
 
 
+_FACE_CACHE = {}  # db key -> (normalized faces, rows) for suggestions
+
+
+def _face_cache(db_file):
+    """All (normalized face, row) pairs for edit-distance suggestions,
+    cached on the DB file's identity: splitting ~90k rows on every miss
+    would be slow, and misses cluster (typos, half-remembered names)."""
+    path = db_file or DB_FILE
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if _FACE_CACHE.get("key") == key:
+        return _FACE_CACHE["value"]
+    conn = connect(db_file)
+    pairs = []
+    try:
+        for row in conn.execute(
+                f"SELECT * FROM cards WHERE layout NOT IN {_NON_PAPER_SQL}",
+                NON_PAPER_LAYOUTS):
+            for token in (row["lookup_all"] or "").strip().split("  "):
+                token = token.strip()
+                if token:
+                    pairs.append((token, row))
+    finally:
+        conn.close()
+    _FACE_CACHE.clear()
+    _FACE_CACHE["key"] = key
+    _FACE_CACHE["value"] = pairs
+    return pairs
+
+
 def lookup_alternates(name, db_file=None, limit=5):
-    """Local candidate cards for an ambiguous explicit reference like
-    [[Selvala]]: rows whose face names contain the given name as words,
-    same matching and ranking as lookup_card but up to `limit` rows,
-    best first. Empty when the database is missing or the reference is
-    unique — the interactive disambiguation prompt only shows for more
-    than one candidate."""
+    """Local candidate cards for a name that lookup_card did not find —
+    explicit refs like [[Selvala]] are never silently fixed to one of
+    these; they are shown to the user (interactive chooser / "did you
+    mean" in the NOT FOUND block) so the miss stays visible. Two passes:
+    face names containing the query as words (sub-names like
+    [[Selvala]]), then close spellings by edit distance (typos like
+    [[Lighting Helix]]). Empty when the database is missing."""
     if not (db_file or DB_FILE).exists():
         return []
     q = normalize_name(name)
@@ -251,14 +295,33 @@ def lookup_alternates(name, db_file=None, limit=5):
         return []
     conn = connect(db_file)
     try:
+        exact = _exact_face_rows(conn, name, limit=limit)
+        if exact:
+            return [_row_to_card(r) for r in exact]
         rows = conn.execute(
-            "SELECT * FROM cards WHERE lookup_all LIKE ? "
+            f"SELECT * FROM cards WHERE lookup_all LIKE ? "
+            f"AND layout NOT IN {_NON_PAPER_SQL} "
             f"ORDER BY {_LOOKUP_ORDER} LIMIT ?",
             (f"% {q} %", *NON_PAPER_LAYOUTS, limit),
         ).fetchall()
+        if rows:
+            return [_row_to_card(r) for r in rows]
     finally:
         conn.close()
-    return [_row_to_card(r) for r in rows]
+    # No sub-name hits: suggest close spellings ("did you mean"). The
+    # cutoff keeps suggestions conservative — no wild guessing for
+    # generic or nonsense words.
+    pairs = _face_cache(db_file) or []
+    out, seen = [], set()
+    for face in difflib.get_close_matches(q, [f for f, _ in pairs],
+                                          n=9, cutoff=0.85):
+        for f, row in pairs:
+            if f == face and row["id"] not in seen:
+                seen.add(row["id"])
+                out.append(_row_to_card(row))
+        if len(out) >= 3:
+            break
+    return out
 
 
 def get_rulings(card, offline=False, db_file=None):

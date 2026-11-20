@@ -109,7 +109,7 @@ class UnbracketedHintTest(unittest.TestCase):
         self.assertEqual(
             cli.UNBRACKETED_HINT.format(name="Lightning Helix"),
             "please surround card names such as [[Lightning Helix]] with "
-            "brackets for faster lookup")
+            "brackets for an exact lookup")
 
 
 class ConfigCommandTest(unittest.TestCase):

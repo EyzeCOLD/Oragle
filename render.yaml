@@ -1,0 +1,16 @@
+# Render blueprint: connect the repo, Render builds the Dockerfile.
+# The two sync: false secrets are entered in the Render dashboard
+# (never stored in git):
+#   MISTRAL_API_KEY  - your Mistral key (console.mistral.ai)
+#   WEB_TOKEN        - any long random string; the browser asks for it
+services:
+  - type: web
+    name: oragle
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: WEB_TOKEN
+        sync: false
