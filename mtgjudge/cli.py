@@ -210,6 +210,20 @@ def _search_cards_runner(name, args):
     if not query:
         return "error: empty query"
     limit = max(1, min(int(args.get("limit") or 8), 25))
+    exact_name = _exact_card_query(query)
+    if exact_name:
+        # Exact-name queries are the local card database's job: going to
+        # the live API for one spends a network round-trip (and Scryfall
+        # rate budget) on something the bulk dump already knows, and is
+        # the one lookup path that dies when Scryfall is unreachable.
+        # offline=True keeps this strictly DB-local; a miss (card newer
+        # than the last bulk import) falls through to the live search.
+        try:
+            card = carddb.lookup_card(exact_name, offline=True)
+        except cards.CardNotFound:
+            card = None
+        if card is not None:
+            return cards.format_search_brief([card], 1)
     try:
         found, total = cards.search_cards(query, limit=limit)
     except Exception as e:  # noqa: BLE001 - report search failures to the model

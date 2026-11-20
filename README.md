@@ -24,8 +24,8 @@ retrieved don't cover the question.
    or say the retrieved context doesn't cover the question.
 4. **Bounded tool use** — if retrieval missed something, the model can
    call `search_rules` (the local index, works offline) and
-   `search_cards` (live Scryfall syntax) for extra rounds before
-   answering.
+   `search_cards` (live Scryfall syntax; exact-name lookups resolve
+   from the local DB first) for extra rounds before answering.
 5. **Streaming answers** — responses stream line by line; rule numbers
    are links that expand the rule text from the local index, card
    names link to Scryfall, mana symbols render with icons.

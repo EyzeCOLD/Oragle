@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest import mock
 
-from mtgjudge import cards, llm
+from mtgjudge import cards, carddb, cli, llm
 
 
 def tool_call_response(call_id, name, args):
@@ -294,6 +294,46 @@ class OpenAIBackendTest(unittest.TestCase):
                                           "MTG_API_KEY": ""}):
             with self.assertRaises(llm.LLMError):
                 llm.chat("openai", "m", [{"role": "user", "content": "q"}])
+
+
+class ExactNameLocalFirstTest(unittest.TestCase):
+    """The model's search_cards tool resolves exact-name queries (the
+    unbracketed-card fallback path) from the local card DB first; the
+    live Scryfall search stays for discovery queries and DB misses."""
+
+    ROW = {"name": "Lightning Helix", "mana_cost": "{1}{R}{W}",
+           "type_line": "Instant", "oracle_text": "some text"}
+
+    def test_exact_query_uses_local_db_only(self):
+        with mock.patch.object(cli.carddb, "lookup_card",
+                               return_value=dict(self.ROW)) as lookup, \
+             mock.patch.object(cli.cards, "search_cards") as live:
+            result = cli._search_cards_runner(
+                "search_cards", {"query": '!\"Lightning Helix"'})
+        lookup.assert_called_once_with("Lightning Helix", offline=True)
+        live.assert_not_called()
+        self.assertIn("1 card(s) match", result)
+        self.assertIn("Lightning Helix", result)
+
+    def test_db_miss_falls_through_to_live(self):
+        with mock.patch.object(cli.carddb, "lookup_card",
+                               side_effect=cards.CardNotFound("nope")), \
+             mock.patch.object(cli.cards, "search_cards",
+                               return_value=([dict(self.ROW)], 1)) as live:
+            result = cli._search_cards_runner(
+                "search_cards", {"query": '!\"Lightning Helix"'})
+        live.assert_called_once()
+        self.assertIn("Lightning Helix", result)
+
+    def test_discovery_queries_stay_live(self):
+        with mock.patch.object(cli.carddb, "lookup_card") as lookup, \
+             mock.patch.object(cli.cards, "search_cards",
+                               return_value=([dict(self.ROW)], 42)) as live:
+            result = cli._search_cards_runner(
+                "search_cards", {"query": "c<=2 colors:blue o:exile"})
+        lookup.assert_not_called()
+        live.assert_called_once()
+        self.assertIn("42 card(s) match", result)
 
 
 if __name__ == "__main__":

@@ -611,6 +611,26 @@ Lesson recorded: verify hidden/collapsed UI by computed display, not
 by the attribute — the earlier headless check read the property and
 passed a visible bug.
 
+## Local-first exact-name lookups in the model tool (2026-11-20, branch)
+
+Blast-radius probe ("what if we're cut off from Scryfall?") found the
+pipeline degrades correctly — NetError -> "search failed: ..." tool
+result, model reports it instead of hallucinating; rules Q&A, cards.db
+lookups and symbols all survive — with one gap: the model's
+search_cards tool resolved UNBRACKETED card mentions (its
+exact-name !"Name" query) through the live API even though the bulk
+dump already knows the card, making that lookup path the only one that
+dies while cut off, and the only deterministic-name operation that
+spent network + rate budget. _search_cards_runner now routes exact
+queries through carddb.lookup_card(offline=True) (strict DB-local) and
+falls through to live Scryfall only on a DB miss (cards newer than the
+last refresh). Discovery queries (the reason live search exists at
+all — Scryfall's ~250-operator syntax is a query engine we would
+have to reimplement, and cards.db has no colors/cmc/legalities columns
+to even represent one) always stay live. Verified with the live path
+monkeypatched to raise: DB hit resolves fully offline, DB miss and
+discovery queries degrade to "search failed".
+
 ## Public packaging (2026-11-20, public-packaging branch)
 
 Goal: a stranger can clone the repo and run oragle on their own API.
