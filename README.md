@@ -23,9 +23,12 @@ retrieved don't cover the question.
    and must answer from them, citing rule numbers for every claim —
    or say the retrieved context doesn't cover the question.
 4. **Bounded tool use** — if retrieval missed something, the model can
-   call `search_rules` (the local index, works offline) and
-   `search_cards` (live Scryfall syntax; exact-name lookups resolve
-   from the local DB first) for extra rounds before answering.
+   call `search_rules` (the local CR index), `query_local_cards`
+   (read-only SQL over the card database: exact lookups, property and
+   aggregate questions — instant, free, offline), and `search_scryfall`
+   (live Scryfall; only for what the local database doesn't store:
+   printings, sets, artists, rarity, prices, brand-new cards) for extra
+   rounds before answering.
 5. **Streaming answers** — responses stream line by line; rule numbers
    are links that expand the rule text from the local index, card
    names link to Scryfall, mana symbols render with icons.
@@ -46,11 +49,16 @@ local answering.
 git clone https://github.com/EyzeCOLD/Oragle.git
 cd Oragle
 uv sync                     # creates .venv; the `oragle` command is runnable
-
-uv run oragle refresh       # download + parse + index the Comprehensive Rules
-uv run oragle refresh cards # build the local card database (~25 MB download)
 cp .env.example .env        # then edit .env (see below) and put your API key in
+
+uv run oragle setup         # one command: rules index + card database + provider check
 ```
+
+`setup` downloads and indexes the Comprehensive Rules, imports Scryfall's
+Oracle bulk dump into the local card database (one row per card, queryable
+by the model), and verifies your provider config with guidance if
+something's missing. The steps are also available separately as
+`oragle refresh` (rules) and `oragle refresh cards`.
 
 Install the CLI globally (editable, tracks this checkout):
 
@@ -162,8 +170,8 @@ deterministic and token-free: player slang is expanded to CR vocabulary
 before ranking, format keywords preload their rules, the golden rules
 (101.1, 101.2) are always in context, and rules cited by retrieved rules
 are pulled in up front. The model can run two more retrieval tools
-itself (`search_rules`, always local; `search_cards`, full Scryfall
-syntax, online) when the initial context misses something. A
+itself (`search_rules` and `query_local_cards`, always local;
+`search_scryfall`, live) when the initial context misses something. A
 stream/timeout watchdog can switch to a fallback model mid-answer.
 Progress, retries, and timing print to stderr.
 
@@ -174,7 +182,9 @@ Everything lives at `$MTG_DATA_DIR` or `~/.local/share/mtg-rules-judge/`:
 - `rules.json` — the parsed, indexed Comprehensive Rules. `oragle refresh`
   re-downloads after a CR release.
 - `cards.db` — SQLite, built from Scryfall's Oracle Cards bulk dump
-  (~16 MB, one row per Oracle id). `oragle refresh cards` rebuilds it.
+  (~39k rows, one per Oracle id: rules text, colors, mana value,
+  legalities, keywords, EDHREC rank). `oragle refresh cards` rebuilds
+  it; the model queries it directly with read-only SQL.
 
 Card lookups hit `cards.db` first, so `card` and `ask` work offline
 (`--offline` makes it explicit). At most one request per 24 h asks

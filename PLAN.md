@@ -653,6 +653,60 @@ SELECT-only authorizer, single-statement parsing, row cap, execution
 timeout. The remaining real work is schema design (color flags vs
 lists, word-boundary-safe oracle_text matching like lookup_all).
 
+## query_local_cards: the model gets SQL over the card DB (2026-11-20, built)
+
+The design walked issue-by-issue in session (schema -> safety -> prompt
+-> naming -> rollout) is now implemented on this branch, per the
+user's "Build it" plus two extensions: an `oragle setup` one-command
+install, and tests for Scryfall being down.
+
+Schema v2 (cards.db): cmc REAL, colors + color_identity as canonical
+'WUBRG'-subset strings ('' = colorless), keywords + oracle_all as
+space-padded lowercase-agnostic text columns for word-boundary LIKE
+(the lookup_all padding trick generalized), type_line/oracle_text
+already merge faces via ' // ', 12 legality_<format> columns
+('legal'/'not_legal'/'banned'/'restricted'), meta.schema_version.
+Rebuild drops a pre-v2 cards table before import (full replace
+anyway; rulings survive in their own table). Decision recorded:
+colors as canonical strings not flags (exact-multicolor equality,
+contains-blue LIKE, length() thresholds all stay simple SQL);
+legality as flat columns not a child table (no joins to get wrong).
+
+carddb.run_sql: ONE statement, opened file:...?mode=ro (handle cannot
+write), PRAGMA query_only, authorizer allowing only SELECT/READ/
+FUNCTION/RECURSIVE (no ATTACH/PRAGMA/writes), progress-handler
+deadline (2s) interrupting runaway scans. Output is budgeted not
+row-capped per user amendment: aggregates return entirely; rows
+serialize (JSON per line, cells cut at 600 chars) until ~4KB, then a
+truncation note teaches narrower SELECTs. Old/existing-DB states get
+instructive strings ("run oragle refresh cards"), never exceptions.
+
+Tool split (user's "explicit source" + "verbs"): search_rules |
+query_local_cards | search_scryfall. The old search_cards name and
+its !"Name" exact-idiom are gone; the unbracketed hint now keys off
+the taught exact-lookup idiom (lookup_all LIKE '%Name %' regex).
+offline mode advertises search_rules + query_local_cards and refuses
+search_scryfall instantly ("disabled in offline mode") instead of
+sitting through a 30s network timeout - tests cover the
+Scryfall-down cases: live failure is a tool result the model
+relates, and the pipeline continues to its answer.
+
+Live observations from real runs (GLM 5.3 flash): (1) the model's
+first Grist, the Hunger Tide lookup missed because the prompt only
+taught apostrophe deletion - commas also normalize to spaces; the
+description now shows 'Grist, the Hunger Tide' -> 'grist the hunger
+tide' and the next run resolved fully locally. (2) on cell
+truncation at 400 chars the model adapted by fetching
+substr(oracle_text, 200, 400) - the self-teaching budget worked as
+designed; CELL_TRUNC raised to 600 to spare single-card rounds.
+(3) Real DB verified: COUNT aggregate (20,424 creatures) and the
+teaching-example discovery query return sensible EDHREC-ranked
+results. 199 tests green; local cards.db rebuilt (39,356 rows).
+
+`oragle setup`: rules + cards via the existing refresh paths, then a
+provider check; missing provider prints .env guidance and exit 1 but
+the local data still builds (search/rule/card work without an LLM).
+
 ## Public packaging (2026-11-20, public-packaging branch)
 
 Goal: a stranger can clone the repo and run oragle on their own API.

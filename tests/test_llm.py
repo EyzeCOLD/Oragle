@@ -296,44 +296,75 @@ class OpenAIBackendTest(unittest.TestCase):
                 llm.chat("openai", "m", [{"role": "user", "content": "q"}])
 
 
-class ExactNameLocalFirstTest(unittest.TestCase):
-    """The model's search_cards tool resolves exact-name queries (the
-    unbracketed-card fallback path) from the local card DB first; the
-    live Scryfall search stays for discovery queries and DB misses."""
+class LocalSqlToolTest(unittest.TestCase):
+    """query_local_cards passes model SQL straight to carddb.run_sql;
+    the unbracketed hint fires on the taught exact-lookup idiom only."""
 
-    ROW = {"name": "Lightning Helix", "mana_cost": "{1}{R}{W}",
-           "type_line": "Instant", "oracle_text": "some text"}
+    def test_sql_passed_through_with_hint_idiom(self):
+        events = []
 
-    def test_exact_query_uses_local_db_only(self):
-        with mock.patch.object(cli.carddb, "lookup_card",
-                               return_value=dict(self.ROW)) as lookup, \
-             mock.patch.object(cli.cards, "search_cards") as live:
-            result = cli._search_cards_runner(
-                "search_cards", {"query": '!\"Lightning Helix"'})
-        lookup.assert_called_once_with("Lightning Helix", offline=True)
-        live.assert_not_called()
-        self.assertIn("1 card(s) match", result)
+        def fake_run_sql(sql):
+            return '{"name": "Lightning Helix"}'
+
+        with mock.patch.object(cli.carddb, "run_sql", side_effect=fake_run_sql):
+            runner = cli.make_tool_runner([], emit=events.append)
+            result = runner("query_local_cards",
+                            {"sql": "SELECT name FROM cards "
+                                    "WHERE lookup_all LIKE '%Lightning Helix %'"})
         self.assertIn("Lightning Helix", result)
+        self.assertEqual(len(events), 1)  # the unbracketed hint
+        self.assertIn("[[Lightning Helix]]", events[0])
 
-    def test_db_miss_falls_through_to_live(self):
-        with mock.patch.object(cli.carddb, "lookup_card",
-                               side_effect=cards.CardNotFound("nope")), \
-             mock.patch.object(cli.cards, "search_cards",
-                               return_value=([dict(self.ROW)], 1)) as live:
-            result = cli._search_cards_runner(
-                "search_cards", {"query": '!\"Lightning Helix"'})
-        live.assert_called_once()
-        self.assertIn("Lightning Helix", result)
+    def test_empty_sql_rejected(self):
+        runner = cli.make_tool_runner([])
+        self.assertEqual(runner("query_local_cards", {"sql": "  "}),
+                         "error: empty query")
 
-    def test_discovery_queries_stay_live(self):
-        with mock.patch.object(cli.carddb, "lookup_card") as lookup, \
+    def test_missing_tool_reported(self):
+        runner = cli.make_tool_runner([])
+        self.assertIn("no such tool", runner("search_cards", {"query": "x"}))
+
+
+class ScryfallDownTest(unittest.TestCase):
+    """Cut off from Scryfall: the live tool degrades to a tool result
+    (never an exception), and the model keeps going to its answer."""
+
+    def test_live_search_failure_is_a_tool_result(self):
+        with mock.patch.object(cli.cards, "search_cards",
+                               side_effect=RuntimeError("connection refused")):
+            runner = cli.make_tool_runner([])
+            result = runner("search_scryfall", {"query": "o:exile"})
+        self.assertIn("search failed: connection refused", result)
+
+    def test_pipeline_continues_after_tool_failure(self):
+        # scripted model: round 1 calls scryfall (fails), round 2 answers
+        responses = [
+            tool_call_response("c1", "search_scryfall", {"query": "o:exile"}),
+            text_response("Scryfall is unreachable, but per rule 101.1 ..."),
+        ]
+        calls = []
+
+        def fake_post(url, payload, headers=None, timeout=0):
+            calls.append(payload)
+            return responses[len(calls) - 1]
+
+        runner = cli.make_tool_runner([])
+
+        with mock.patch.object(llm.net, "post_json", side_effect=fake_post), \
+             mock.patch.dict(os.environ, {"MISTRAL_API_KEY": "k"}, clear=True), \
              mock.patch.object(cli.cards, "search_cards",
-                               return_value=([dict(self.ROW)], 42)) as live:
-            result = cli._search_cards_runner(
-                "search_cards", {"query": "c<=2 colors:blue o:exile"})
-        lookup.assert_not_called()
-        live.assert_called_once()
-        self.assertIn("42 card(s) match", result)
+                               side_effect=RuntimeError("connection refused")):
+            backend, model, answer = llm.ask_llm(
+                "sys", [], "which cards exile?",
+                tools=[{"type": "function",
+                        "function": {"name": "search_scryfall",
+                                     "parameters": {"type": "object"}}},
+                       {"type": "function",
+                        "function": {"name": "query_local_cards",
+                                     "parameters": {"type": "object"}}}],
+                tool_runner=runner)
+        self.assertIn("unreachable", answer)
+
 
 
 if __name__ == "__main__":
