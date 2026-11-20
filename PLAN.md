@@ -631,6 +631,28 @@ to even represent one) always stay live. Verified with the live path
 monkeypatched to raise: DB hit resolves fully offline, DB miss and
 discovery queries degrade to "search failed".
 
+Card search exists only to serve grounded answers (user decision,
+2026-11-20, local-first-lookups branch): the `oragle cards` passthrough
+(command + tests + README section) is REMOVED. Scryfall is the best
+Scryfall — a terminal re-skin of their search is not this app's
+point, so card searching now exists solely as the model's search_cards
+tool inside the answering pipeline. Consequence for earlier reasoning
+in this file: the "we would have to reimplement Scryfall syntax"
+argument survives only for human-typed queries, and there are none
+left — the model authors every query and can learn whatever dialect
+a prompt teaches. Live Scryfall search remains the tool's engine today
+for freshness (cards newer than the last bulk import, day-old errata)
+and result ranking. Fallback plan if Scryfall goes away (sharpened by
+the user: "do we need a language when we already have a language?" -
+we do not): extend cards.db with the bulk dump's colors/cmc/
+legalities/keywords fields and give the model a READ-ONLY SQL tool
+over the table instead of any invented dialect - models are heavily
+trained on SQL, SQLite is the engine, and the prompt only needs to
+show the schema. Safety must be by construction: query_only=ON, a
+SELECT-only authorizer, single-statement parsing, row cap, execution
+timeout. The remaining real work is schema design (color flags vs
+lists, word-boundary-safe oracle_text matching like lookup_all).
+
 ## Public packaging (2026-11-20, public-packaging branch)
 
 Goal: a stranger can clone the repo and run oragle on their own API.

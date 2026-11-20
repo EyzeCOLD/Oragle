@@ -107,20 +107,6 @@ def cmd_card(args):
     return 0
 
 
-def cmd_cards(args):
-    query = " ".join(args.query)
-    found, total = cards.search_cards(query, limit=args.top)
-    if not found:
-        print(f"No cards matched {query!r}. Check the Scryfall syntax "
-              "(e.g. c<=2 colors:blue t:instant o:exile).")
-        return 1
-    print(f"{total} match(es); showing {len(found)}:\n")
-    for card in found:
-        print(cards.format_card(card))
-        print()
-    return 0
-
-
 def _print_rule(rule, score=None):
     heading = " - ".join(h for h in [rule["chapter"], rule["section"]] if h)
     suffix = f"  (score {score:.3f})" if score is not None else ""
@@ -1182,11 +1168,6 @@ def main(argv=None):
     p.add_argument("--offline", action="store_true",
                    help="use only the local card database (no network)")
     p.set_defaults(func=cmd_card)
-
-    p = sub.add_parser("cards", help="search cards with Scryfall syntax (c<=2 colors:blue o:exile)")
-    p.add_argument("query", nargs="+")
-    p.add_argument("--top", type=int, default=10)
-    p.set_defaults(func=cmd_cards)
 
     p = sub.add_parser("ask", help="answer a rules question with citations")
     p.add_argument("question", nargs="+")

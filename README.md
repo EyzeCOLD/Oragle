@@ -100,7 +100,6 @@ oragle card "Lightning Helix" --offline # no network at all
 oragle ask "do blockers assign damage before attackers?" -v
 oragle                                  # interactive session (REPL)
 oragle serve                            # web app on http://127.0.0.1:10000
-oragle cards "c<=2 colors:blue t:instant o:exile legal:pauper"
 ```
 
 ### Interactive mode
