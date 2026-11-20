@@ -303,6 +303,28 @@ sand pile (gold/silver) glints and a stream falls through the neck —
 the sand element sits OUTSIDE the rotating element so the pile always
 stays in the visual bottom bulb through the flip.
 prefers-reduced-motion freezes it to a static hourglass.
+Card symbols in the web frontend (2026-11-20, symbol-rendering branch):
+{2}{U/R}{U} in answers and expanded rulebox text now render as
+inline Scryfall SVG icons, 1.02em, both themes. Frontend renderSymbols()
+maps braces to codes (content minus slash, Scryfall capitalization:
+{W/U} -> "WU", {W/P} -> "WP", {T} -> "T", digits bare, {100}/underline
+forms stay literal text) and emits <img src="/symbol/{code}.svg">;
+onerror swaps the img back to the literal brace text, so unknown codes
+and first-touch offline degrade to exactly the old behavior. Backend:
+mtgjudge/symbols.py caches each icon under DATA_DIR/symbols (one
+Scryfall fetch per symbol ever, then fully offline), served by an OPEN
+/symbol/{code} route (img tags cannot send Authorization; like /health,
+no user data). Validated codes [0-9A-Za-z]{1,6}; offline+uncached = 404.
+Gotcha discovered live: scryfall svg filenames are UPPERCASE for
+letters (u.svg 404s, U.svg is real). Also fixed the recurring raw
+**bold** problem: the old bold regex captured [^*\n]+, so a bold span
+containing a nested *italic* failed whole and printed literally; the
+new capture allows single asterisks inside (nested em + kids play
+nice), and the em pass is guarded against touching <strong> edges.
+Both applied in renderAnswer and the rulebox expansion. Verified
+headless: 8/8 symbols load with correct srcs, bold/em nested case
+renders, unknown braces literal, axe + autoscroll + 169 tests green.
+
 Context bleed fix (2026-11-20, user-reported: "new session said hello,
 asked about the old topic"): two causes. The web client persisted the
 thread id in localStorage and restored it on every page load, and the

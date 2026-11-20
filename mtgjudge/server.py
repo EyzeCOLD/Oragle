@@ -20,7 +20,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import carddb, cards, cli, cr, llm, search, store
+from . import carddb, cards, cli, cr, llm, net, search, store, symbols
 
 WEB_DIR = Path(__file__).parent / "web"
 MAX_JOBS = 500  # oldest finished jobs pruned; single-user app
@@ -194,14 +194,15 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- helpers --------------------------------------------------------
 
-    def _reply(self, code, payload=None, content_type="application/json"):
+    def _reply(self, code, payload=None, content_type="application/json",
+               cache="no-store"):
         body = b"" if payload is None else (
             payload if isinstance(payload, bytes)
             else json.dumps(payload).encode("utf-8"))
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         if body and self.command != "HEAD":
             self.wfile.write(body)
@@ -227,6 +228,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_index()
         if self.path == "/health":
             return self._health()
+        if self.path.startswith("/symbol/"):
+            # img tags cannot send Authorization headers; icon SVGs are
+            # public Scryfall art and carry no user data (like /health)
+            return self._symbol(self.path[len("/symbol/"):])
         if not self._authorized():
             return self._reply(401, {"error": "unauthorized"})
         path = self.path.split("?", 1)
@@ -287,6 +292,15 @@ class Handler(BaseHTTPRequestHandler):
         except store.NoRulesError:
             effective = "(no rules loaded — run refresh)"
         self._reply(200, {"ok": True, "effective_date": effective})
+
+    def _symbol(self, rest):
+        code = rest.split("?")[0].removesuffix(".svg").strip("/")
+        try:
+            data = symbols.get_symbol(code, offline=self.hub.offline)
+        except (FileNotFoundError, net.NetError):
+            return self._reply(404, {"error": "symbol not available"})
+        self._reply(200, data, "image/svg+xml",
+                    cache="public, max-age=604800")
 
     def _job(self, job_id):
         snap = self.hub.job_snapshot(job_id)
