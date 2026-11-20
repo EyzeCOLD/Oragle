@@ -85,6 +85,23 @@ class HubTest(unittest.TestCase):
         self.assertTrue(created)
         self.assertIn(tid, hub.threads)
 
+    def test_idle_thread_evicted(self):
+        # conversation memory must not live forever: an expired thread id
+        # from a stale client starts a fresh thread, not the old context
+        import time as time_mod
+        hub = self._hub()
+        tid = hub.new_thread()
+        hub.submit("q", tid, sync=True)
+        self.assertIn(tid, hub.threads)
+        hub.threads[tid]["last_used"] = (
+            time_mod.time() - server.THREAD_TTL_SECONDS - 60)
+        hub.submit("unrelated", None, sync=True)  # runs the prune
+        self.assertNotIn(tid, hub.threads)
+        tid2, created = hub.thread_or_new(tid)
+        self.assertTrue(created)
+        self.assertNotEqual(tid2, tid)
+        self.assertEqual(hub.threads[tid2]["history"], [])
+
 
 class ApiTest(unittest.TestCase):
     """End-to-end over a real socket: auth, ask -> poll, health."""

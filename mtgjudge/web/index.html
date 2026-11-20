@@ -5,58 +5,462 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>oragle — MTG rules judge</title>
 <style>
+/*
+ * Gaudy late-90s fantasy reskin. Materials, all procedural (inline SVG
+ * turbulence data URIs layered over gradients): brick wall, stone,
+ * wood beams, brushed brass, aged parchment, leather. Functional
+ * selectors are unchanged; markup and JS are untouched.
+ */
   :root {
-    --bg: #0e1216;
-    --panel: #161c22;
-    --panel-2: #1d242c;
-    --text: #d8e0e8;
-    --dim: #7d8a97;
-    --accent: #56c8ff;
-    --card: #d484ff;
-    --user-bubble: #24446b;
-    --err: #ff8484;
+    --bg: #14100b;
+    --text: #e8ddc0;
+    --dim: #a39372;
+    --accent: #e8bd54;
+    --accent-hi: #ffe08a;
+    --accent-lo: #8a611d;
+    --card: #7aa0d8;
+    --err: #ff9d7a;
     --hint: #ffd166;
+    --ink: #32220f;          /* text on parchment */
+    /* fine warm speckle, for grit on almost every surface */
+    --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0 0.70 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    /* horizontal wood grain, for the header/composer beams and doors */
+    --tex-wood: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='70'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.16' numOctaves='3' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0.30 0 0 0 0 0.19 0 0 0 0 0.07 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='140' height='70' filter='url(%23f)'/%3E%3C/svg%3E");
+    /* blotchy dark rock, for the recessed reading viewport */
+    --tex-stone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035 0.045' numOctaves='4' seed='9'/%3E%3CfeColorMatrix values='0 0 0 0 0.13 0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23s)'/%3E%3C/svg%3E");
+    /* brushed brass streaks, for metallic rails and buttons */
+    --tex-brass: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='30'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.32 0.02' numOctaves='2' seed='5'/%3E%3CfeColorMatrix values='0 0 0 0 0.9 0 0 0 0 0.7 0 0 0 0 0.3 0 0 0 0.3 0'/%3E%3C/filter%3E%3Crect width='120' height='30' filter='url(%23b)'/%3E%3C/svg%3E");
+    /* large umber stains, for aged parchment */
+    --tex-stain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='170'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.012' numOctaves='4' seed='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.25 0 0 0 0 0.08 0 0 0 0.13 0'/%3E%3C/filter%3E%3Crect width='300' height='170' filter='url(%23p)'/%3E%3C/svg%3E");
+    /* the wall behind the whole UI: staggered dark brickwork */
+    --tex-brick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='52'%3E%3Crect width='96' height='52' fill='%230c0a07'/%3E%3Crect x='1' y='1' width='45' height='24' fill='%23251e15'/%3E%3Crect x='48' y='1' width='47' height='24' fill='%23211a12'/%3E%3Crect x='-23' y='27' width='45' height='24' fill='%23231c13'/%3E%3Crect x='25' y='27' width='45' height='24' fill='%23261f16'/%3E%3Crect x='73' y='27' width='45' height='24' fill='%23201911'/%3E%3C/svg%3E");
+    /* cold variant: fine horizontal brush streaks over blued steel */
+    --tex-steel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.45' numOctaves='2' seed='6'/%3E%3CfeColorMatrix values='0 0 0 0 0.72 0 0 0 0 0.79 0 0 0 0 0.88 0 0 0 0.2 0'/%3E%3C/filter%3E%3Crect width='120' height='60' filter='url(%23t)'/%3E%3C/svg%3E");
+    /* cold variant: coarse forge blotches, cool gray */
+    --tex-steel-coarse: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.038' numOctaves='4' seed='13'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.49 0 0 0 0 0.58 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23c)'/%3E%3C/svg%3E");
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
-    background: var(--bg);
+    background:
+      var(--noise),
+      radial-gradient(150% 90% at 50% 0, rgba(255, 190, 90, .07), transparent 60%),
+      var(--tex-brick),
+      #0e0c08;
+    background-size: 140px, auto, 96px 52px, auto;
     color: var(--text);
     font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     display: flex;
     flex-direction: column;
   }
+  ::selection { background: #7a5a1e; color: #ffe9b0; }
+
+  /* ---- top beam: carved hardwood with a gilt title -------------------- */
   header {
     display: flex;
     align-items: baseline;
     gap: 12px;
     padding: 12px 16px 10px;
-    border-bottom: 1px solid #232b34;
-    background: var(--panel);
+    border-bottom: 1px solid #000;
+    background: var(--noise),
+                linear-gradient(180deg, #52391b, #36230e 55%, #241606);
+    box-shadow: inset 0 2px 0 rgba(255, 220, 150, .16),
+                inset 0 -4px 6px rgba(0, 0, 0, .7),
+                0 3px 8px rgba(0, 0, 0, .65);
   }
   header h1 {
-    font-size: 18px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 20px;
     margin: 0;
-    color: var(--accent);
-    font-weight: 650;
+    letter-spacing: 3px;
+    font-variant: small-caps;
+    color: #f2cf7c;
+    text-shadow: 0 -1px 0 #553a10, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9);
   }
-  header .sub { color: var(--dim); font-size: 12.5px; }
-  header button {
-    margin-left: auto;
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 8px;
+  header .sub {
+    color: #cbb890; font-size: 12.5px; letter-spacing: .3px;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .8);
+  }
+
+  /* ---- buttons: engraved brass plaques -------------------------------- */
+  header button, #deckbtn, #deckpanel .row button.cancel {
+    background: var(--tex-brass),
+                linear-gradient(180deg, #57431f, #32250f 60%, #1c1306);
+    border: 1px solid #060503;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 0 rgba(255, 230, 160, .38),
+                inset 0 -2px 4px rgba(0, 0, 0, .8),
+                0 2px 4px rgba(0, 0, 0, .6);
+    color: #f4dfa3;
+    font: 700 12px Georgia, "Times New Roman", serif;
+    text-transform: uppercase;
+    letter-spacing: .8px;
     padding: 6px 12px;
-    font-size: 13.5px;
+    cursor: pointer;
+    text-shadow: 0 1px 1px #000, 0 -1px 0 rgba(255, 235, 170, .2);
   }
-  header button:active { background: #2a333d; }
+  header button { margin-left: auto; }
+  header button:hover, #deckbtn:hover, #deckpanel .row button.cancel:hover {
+    color: #ffe4a6;
+    box-shadow: inset 0 1px 0 rgba(255, 230, 160, .45),
+                inset 0 -2px 4px rgba(0, 0, 0, .8),
+                inset 0 0 14px rgba(255, 190, 80, .25),
+                0 2px 4px rgba(0, 0, 0, .6);
+  }
+  header button:active, #deckbtn:active, #deckpanel .row button.cancel:active {
+    background: linear-gradient(180deg, #1c1306, #3a2b11);
+    box-shadow: inset 0 3px 5px rgba(0, 0, 0, .8),
+                inset 0 -1px 0 rgba(255, 230, 160, .25);
+    transform: translateY(1px);
+  }
+
+  /* ---- primary buttons: jade gemstones --------------------------------- */
+  form button, #gate button, #deckpanel .row button, #threadbar button {
+    background:
+      radial-gradient(90% 70% at 25% 6%,
+        rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 40%),
+      linear-gradient(170deg, #157f63 0%, #0e6b52 45%, #0a5644 80%, #085741);
+    border: 1px solid #03392a;
+    border-radius: 999px;
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .4),
+                inset 0 -5px 9px rgba(0, 25, 15, .6),
+                0 2px 6px rgba(0, 0, 0, .65),
+                0 0 12px rgba(70, 225, 165, .22);
+    color: #f6fffb;
+    font: 700 12.5px Georgia, "Times New Roman", serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 14px;
+    cursor: pointer;
+    text-shadow: 0 1px 2px rgba(0, 40, 20, .85);
+  }
+  form button:hover, #gate button:hover, #deckpanel .row button:hover,
+  #threadbar button:hover {
+    /* same face, brighter glow: keeps text contrast intact */
+    color: #ffffff;
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .5),
+                inset 0 -5px 9px rgba(0, 25, 15, .6),
+                0 2px 6px rgba(0, 0, 0, .65),
+                0 0 26px rgba(90, 255, 190, .6);
+  }
+  form button:active, #gate button:active, #deckpanel .row button:active,
+  #threadbar button:active {
+    background: linear-gradient(170deg, #0a4d3d 0%, #116b52);
+    box-shadow: inset 0 4px 7px rgba(0, 20, 12, .8),
+                inset 0 -1px 0 rgba(190, 255, 220, .3),
+                0 1px 2px rgba(0, 0, 0, .6);
+    transform: translateY(1px);
+  }
+  form button:disabled {
+    opacity: .4;
+    transform: none;
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .4),
+                inset 0 -5px 9px rgba(0, 25, 15, .6), 0 2px 6px rgba(0, 0, 0, .65);
+  }
+  #threadbar button { padding: 3px 10px; font-size: 11.5px; }
+  /* the Ask button is the centerpiece: a fat glowing jade lozenge */
+  #send {
+    padding: 13px 26px;
+    font-size: 14px;
+    letter-spacing: 1.5px;
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .4),
+                inset 0 -6px 11px rgba(0, 25, 15, .6),
+                0 3px 8px rgba(0, 0, 0, .7),
+                0 0 18px rgba(70, 225, 165, .3);
+  }
+  #send:hover {
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .5),
+                inset 0 -6px 11px rgba(0, 25, 15, .6),
+                0 3px 8px rgba(0, 0, 0, .7),
+                0 0 26px rgba(90, 255, 190, .55);
+  }
+  #deckbtn.has-deck {
+    color: #b8f2d6;
+    box-shadow: inset 0 1px 0 rgba(255, 230, 160, .38),
+                inset 0 -2px 4px rgba(0, 0, 0, .8),
+                0 0 10px rgba(90, 255, 190, .35);
+  }
+
+  /* ---- recessed viewport: dungeon stone with corner rivets ------------- */
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 14px 8px;
+    margin: 8px 10px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid #000;
+    border-radius: 4px;
+    background:
+      radial-gradient(circle at 8px 8px, #f2d47e 0 2px, #8a611d 3px, #2c1d0a 3.5px, transparent 4px) no-repeat,
+      radial-gradient(circle at calc(100% - 8px) 8px, #f2d47e 0 2px, #8a611d 3px, #2c1d0a 3.5px, transparent 4px) 100% 0 no-repeat,
+      radial-gradient(circle at 8px calc(100% - 8px), #f2d47e 0 2px, #8a611d 3px, #2c1d0a 3.5px, transparent 4px) 0 100% no-repeat,
+      radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), #f2d47e 0 2px, #8a611d 3px, #2c1d0a 3.5px, transparent 4px) 100% 100% no-repeat,
+      radial-gradient(60% 30% at 50% 0%, rgba(255, 170, 70, .09), transparent 70%),
+      var(--noise), var(--tex-stone), #171310;
+    box-shadow: inset 0 3px 10px rgba(0, 0, 0, .85),
+                inset 0 -1px 0 rgba(255, 220, 150, .06),
+                0 1px 0 rgba(255, 230, 170, .1),
+                0 4px 10px rgba(0, 0, 0, .5);
+  }
+  main::-webkit-scrollbar { width: 15px; }
+  main::-webkit-scrollbar-track {
+    background: #0e0b08;
+    border-left: 1px solid #000;
+    box-shadow: inset 2px 0 4px rgba(0, 0, 0, .7);
+  }
+  main::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, #6b5226, #3a2b13 55%, #59431e);
+    border: 1px solid #120d06;
+    border-radius: 3px;
+    box-shadow: inset 0 1px 0 rgba(255, 230, 160, .3),
+                inset 0 -1px 2px rgba(0, 0, 0, .8);
+  }
+
+  /* ---- messages -------------------------------------------------------- */
+  .bubble {
+    max-width: 720px;
+    width: fit-content;
+    padding: 10px 14px;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15.5px;
+    line-height: 1.6;
+  }
+  .user {  /* oiled leather book cover */
+    align-self: flex-end;
+    background: var(--noise),
+                linear-gradient(170deg, #63523a, #41341f 60%, #2f2413);
+    border: 1px solid #100c07;
+    border-top: 1px solid #6b5636;
+    border-radius: 12px 3px 10px 4px;
+    box-shadow: inset 0 1px 0 rgba(255, 230, 170, .22),
+                inset 0 -3px 6px rgba(0, 0, 0, .6),
+                inset 0 0 24px rgba(0, 0, 0, .35),
+                2px 3px 6px rgba(0, 0, 0, .55);
+    color: #f3e6c4;
+  }
+  .answer {  /* aged parchment sheet */
+    align-self: flex-start;
+    position: relative;
+    max-width: min(720px, 100%);
+    background: var(--noise), var(--tex-stain),
+                radial-gradient(130% 110% at 50% 0, #f0e3c0, #ddc691 70%, #cfb273);
+    border: 1px solid #7c5a26;
+    border-radius: 3px 12px 4px 14px;
+    box-shadow: inset 0 0 34px rgba(120, 85, 30, .3),
+                inset 0 2px 0 rgba(255, 255, 240, .5),
+                2px 3px 7px rgba(0, 0, 0, .6);
+    color: var(--ink);
+  }
+  .answer::after {  /* gold wax seal pressed on the corner */
+    content: "";
+    position: absolute;
+    top: -10px;
+    right: 10px;
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 36% 30%, #ffd987, #c08a33 45%, #6b4a14 78%, #3a2607);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .7),
+                inset 0 1px 1px rgba(255, 240, 190, .8),
+                inset 0 -2px 3px rgba(0, 0, 0, .5);
+    opacity: .92;
+  }
+  .answer.error {
+    background: var(--noise),
+                linear-gradient(170deg, #45221a, #2b120c);
+    border: 1px solid #1a0a06;
+    color: var(--err);
+  }
+  .answer.error::after {
+    background: radial-gradient(circle at 36% 30%, #ff9a6a, #96351c 50%, #3d0f05 80%);
+  }
+  .answer .footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #b99a58;
+    box-shadow: inset 0 1px 0 rgba(255, 250, 230, .6);
+    color: #5a4623;
+    font-size: 12px;
+    white-space: normal;
+  }
+  .answer details { margin-top: 8px; }
+  .answer summary {
+    cursor: pointer; color: #5a4623; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .5px;
+    font-family: system-ui, sans-serif;
+  }
+  .answer summary:hover { color: #7c5613; }
+  .answer details pre {
+    margin: 6px 0 0;
+    padding: 6px 8px;
+    background: rgba(60, 40, 10, .08);
+    font-size: 12px;
+    color: #4f3a18;
+    white-space: pre-wrap;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .sysnote {
+    align-self: center;
+    color: #d9b25f;
+    font-style: italic;
+    font-size: 12.5px;
+    padding: 2px 8px;
+    text-shadow: 0 1px 0 #000, 0 0 8px rgba(217, 178, 95, .25);
+  }
+
+  /* ---- hint rail: brushed brass ---------------------------------------- */
+  #threadbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 7px 16px;
+    margin: 6px 10px 0;
+    font-size: 12.5px;
+    color: #d9c08b;
+    border: 1px solid #060503;
+    border-radius: 4px;
+    background: var(--noise), var(--tex-brass),
+                linear-gradient(180deg, #4d3d1c, #2b1f0c);
+    box-shadow: inset 0 1px 0 rgba(255, 230, 160, .3),
+                inset 0 -2px 4px rgba(0, 0, 0, .7),
+                0 2px 5px rgba(0, 0, 0, .55);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .7);
+  }
+
+  a.rule {
+    color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    text-shadow: 0 1px 0 #000;
+  }
+  a.rule:hover { color: var(--accent-hi); text-decoration: underline; }
+  a.card { color: var(--card); text-decoration: none; text-shadow: 0 1px 0 #000; }
+  a.card:visited { color: var(--card); }
+  /* citation colors readable on parchment */
+  .answer a.rule { color: #7c5613; text-shadow: none; }
+  .answer a.rule:hover { color: #5d3f0d; }
+  .answer a.card,
+  .answer a.card:visited { color: #274e8d; text-shadow: none; }
+
+  /* rule text: a carved stone slab set into the parchment */
+  .rulebox {
+    margin: 8px 0 2px;
+    padding: 8px 10px;
+    background: var(--noise), var(--tex-stone), #241f19;
+    border: 1px solid #0a0806;
+    border-left: 3px solid #c9a44c;
+    border-radius: 3px;
+    box-shadow: inset 3px 3px 8px rgba(0, 0, 0, .75),
+                inset -1px -1px 0 rgba(255, 220, 150, .07);
+    color: #ded0ae;
+    font-size: 14px;
+    font-family: Georgia, "Times New Roman", serif;
+    white-space: pre-wrap;
+  }
+  .rulebox .num { color: #e0b95c; font-weight: 700; }
+
+  /* ---- bottom beam: composer ------------------------------------------- */
+  form {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    margin-top: 6px;
+    border-top: 1px solid #000;
+    background: var(--noise), var(--tex-wood),
+                linear-gradient(180deg, #3f2a12, #241606);
+    box-shadow: inset 0 2px 0 rgba(255, 220, 150, .14),
+                inset 0 -4px 6px rgba(0, 0, 0, .7);
+  }
+  #composer.attached { border-top: none; }  /* brass rail above owns it */
+
+  /* input and textarea: stone wells sunk into the wood */
+  form input, #deckpanel textarea, #gate input {
+    background: var(--noise), var(--tex-stone), #14110d;
+    color: var(--text);
+    border: 1px solid #060504;
+    border-radius: 4px;
+    box-shadow: inset 2px 2px 6px rgba(0, 0, 0, .85),
+                inset -1px -1px 0 rgba(255, 220, 150, .07);
+    padding: 11px 14px;
+    font: inherit;
+  }
+  ::placeholder { color: #9e947c; font-style: italic; }
+  form input:focus, #deckpanel textarea:focus, #gate input:focus {
+    outline: none;
+    border-color: #6d4c15;
+    box-shadow: inset 2px 2px 6px rgba(0, 0, 0, .85),
+                inset -1px -1px 0 rgba(255, 220, 150, .07),
+                0 0 0 1px #8a611d, 0 0 9px rgba(232, 189, 84, .25);
+  }
+  form input { flex: 1; }
+
+  #deckpanel .inner textarea {
+    width: 100%;
+    height: 220px;
+    font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    margin-bottom: 12px;
+    resize: vertical;
+  }
+  #deckpanel .inner .row { display: flex; gap: 8px; }
+  #deckpanel .inner .row button { flex: 1; }
+
+  /* ---- modals: oaken doors with brass inlay ---------------------------- */
+  #gate, #deckpanel {
+    position: fixed; inset: 0;
+    background: rgba(8, 6, 3, .88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #gate .inner, #deckpanel .inner {
+    background: var(--noise), var(--tex-wood),
+                linear-gradient(180deg, #3f2d14, #221606);
+    border: 1px solid #000;
+    border-radius: 8px;
+    padding: 22px;
+    max-width: 380px;
+    /* double inset ring reads as a carved door frame with brass inlay */
+    box-shadow: inset 0 0 0 3px #191207, inset 0 0 0 4px #8a611d,
+                inset 0 3px 10px rgba(0, 0, 0, .75),
+                0 14px 50px rgba(0, 0, 0, .85), 0 0 80px rgba(0, 0, 0, .6);
+  }
+  #gate h2, #deckpanel h2 {
+    margin: 0 0 8px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 19px;
+    letter-spacing: 2px;
+    font-variant: small-caps;
+    color: #f2cf7c;
+    text-shadow: 0 -1px 0 #553a10, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9);
+  }
+  #gate p, #deckpanel p {
+    margin: 0 0 14px; color: #e4d6ab; font-size: 13.5px;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+  #gate input { width: 100%; margin-bottom: 12px; }
+  #gate button { width: 100%; padding: 11px; }
+  #gate .msg { margin: 0 0 12px; font-size: 13.5px; color: var(--err); }
+  .hidden { display: none !important; }
+
+  /* ---- status strip: dark metal rail ----------------------------------- */
   #status {
     padding: 6px 16px calc(8px + env(safe-area-inset-bottom));
     font-size: 12.5px;
     color: var(--dim);
     min-height: 30px;
-    border-top: 1px solid #1a2129;
+    border-top: 1px solid #000;
+    background: var(--tex-brass),
+                linear-gradient(180deg, #21190c, #14100a);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, .7),
+                inset 0 -1px 0 rgba(255, 230, 160, .12);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -64,213 +468,233 @@
   #status .live { color: var(--accent); }
   #status.waking { color: var(--hint); }
   #status.error { color: var(--err); }
-  main {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 14px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+
+  /* =====================================================================
+   * COLD STEEL VARIANT (body.steel, toggled by the header button).
+   * Wood and leather become blued steel with aggressive, unblurred
+   * chisel bevels and SHARP drop shadows; jade and parchment stay.
+   * ===================================================================== */
+  body.steel {
+    background:
+      var(--noise),
+      repeating-linear-gradient(0deg, transparent 0 199px, rgba(0, 0, 0, .55) 199px 201px),
+      repeating-linear-gradient(90deg, transparent 0 199px, rgba(0, 0, 0, .55) 199px 201px),
+      radial-gradient(150% 90% at 50% 0, rgba(150, 190, 230, .07), transparent 60%),
+      var(--tex-steel-coarse), #0b0d10;
+    background-size: 140px, auto, auto, auto, 160px, auto;
   }
-  .bubble {
-    max-width: 720px;
-    width: fit-content;
-    padding: 10px 14px;
-    border-radius: 12px;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
+  /* riveted steel beams */
+  body.steel header, body.steel form {
+    background: var(--noise), var(--tex-steel), var(--tex-steel-coarse),
+                linear-gradient(180deg, #4a525b, #333a42 60%, #252b31);
+    border-bottom-color: #000;
+    box-shadow: inset 0 1px 0 #d5e0ea,
+                inset 0 2px 1px rgba(170, 195, 220, .4),
+                inset 0 -2px 1px #05070a,
+                0 3px 0 rgba(0, 0, 0, .8),
+                0 4px 6px rgba(0, 0, 0, .5);
   }
-  .user {
-    align-self: flex-end;
-    background: var(--user-bubble);
-    border-bottom-right-radius: 4px;
+  body.steel header { border-bottom: 1px solid #000; }
+  body.steel header h1 {
+    color: #f2f7fc;
+    text-shadow: 0 -1px 0 #66788a, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9),
+                 0 0 16px rgba(160, 200, 240, .25);
   }
-  .answer {
-    align-self: flex-start;
-    max-width: min(720px, 100%);
-    background: var(--panel);
-    border: 1px solid #232b34;
-    border-bottom-left-radius: 4px;
+  body.steel header .sub { color: #e2e8ee; text-shadow: 0 1px 0 rgba(0, 0, 0, .75); }
+  /* blocky metal buttons: flat faces, hard multi-step chisels, zero blur */
+  body.steel header button, body.steel #deckbtn,
+  body.steel #deckpanel .row button.cancel {
+    border-radius: 0;
+    background: var(--noise), var(--tex-steel),
+                linear-gradient(180deg, #566169, #3d454f 55%, #2a303a);
+    color: #eef4fa;
+    box-shadow: inset 1px 0 0 #7c8d9d,
+                inset -1px 0 0 #0d1115,
+                inset 0 1px 0 #b9c8d6,
+                inset 0 -1px 0 #05070a,
+                2px 3px 0 rgba(0, 0, 0, .75);
+    text-shadow: 0 1px 1px #000, 0 -1px 0 rgba(150, 175, 200, .28);
   }
-  .answer.error { border-color: #57323a; color: var(--err); }
-  .answer .footer {
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px solid #232b34;
-    color: var(--dim);
-    font-size: 12px;
-    white-space: normal;
+  body.steel header button:hover, body.steel #deckbtn:hover,
+  body.steel #deckpanel .row button.cancel:hover {
+    color: #ffffff;
+    background: var(--noise), var(--tex-steel),
+                linear-gradient(180deg, #57626e, #3c454f 55%, #262d35);
+    box-shadow: inset 1px 0 0 #8fa2b4,
+                inset -1px 0 0 #0d1115,
+                inset 0 1px 0 #cdd9e4,
+                inset 0 -1px 0 #05070a,
+                2px 3px 0 rgba(0, 0, 0, .75),
+                0 0 10px rgba(160, 200, 240, .25);
   }
-  .answer details { margin-top: 8px; }
-  .answer summary { cursor: pointer; color: var(--dim); font-size: 12px; }
-  .answer details pre {
-    margin: 6px 0 0;
-    font-size: 12px;
-    color: var(--dim);
-    white-space: pre-wrap;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
+  body.steel header button:active, body.steel #deckbtn:active,
+  body.steel #deckpanel .row button.cancel:active {
+    background: linear-gradient(180deg, #1c2127, #2b323a);
+    /* pressed: the chisel flips and the hard drop shadow collapses */
+    box-shadow: inset 1px 0 0 #0d1115,
+                inset -1px 0 0 #7c8d9d,
+                inset 0 1px 0 #05070a,
+                inset 0 -1px 0 #b9c8d6,
+                inset 0 2px 4px rgba(0, 0, 0, .7),
+                1px 1px 0 rgba(0, 0, 0, .75);
+    transform: translateY(1px);
   }
-  .sysnote {
-    align-self: center;
-    color: var(--dim);
-    font-size: 12.5px;
-    padding: 2px 8px;
+  /* brass rails become brushed steel rails */
+  body.steel #threadbar, body.steel #status {
+    background: var(--noise), var(--tex-steel),
+                linear-gradient(180deg, #3b434c, #1b2026);
+    color: #b8c4d2;
+    box-shadow: inset 0 1px 0 #8fa2b4,
+                inset 0 -2px 1px #05070a,
+                0 2px 0 rgba(0, 0, 0, .7);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .8);
   }
-  #threadbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 7px 16px;
-    font-size: 12.5px;
-    color: var(--dim);
-    border-top: 1px solid #232b34;
-    border-bottom: 1px solid #232b34;
-    background: var(--panel);
+  /* user bubble: riveted steel plate, sharp edges */
+  body.steel .user {
+    background:
+      radial-gradient(circle at 10px 10px, #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) no-repeat,
+      radial-gradient(circle at calc(100% - 10px) 10px, #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) 100% 0 no-repeat,
+      radial-gradient(circle at 10px calc(100% - 10px), #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) 0 100% no-repeat,
+      radial-gradient(circle at calc(100% - 10px) calc(100% - 10px), #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) 100% 100% no-repeat,
+      var(--noise), var(--tex-steel),
+      linear-gradient(170deg, #434c56, #272e35 65%, #1d2228);
+    border: 1px solid #000;
+    border-top: 1px solid #6d7d8d;
+    border-radius: 3px 10px 2px 12px;
+    box-shadow: inset 0 1px 0 rgba(190, 210, 230, .3),
+                inset 0 -2px 0 #05070a,
+                inset 2px 2px 3px rgba(0, 0, 0, .55),
+                2px 3px 0 rgba(0, 0, 0, .6);
+    color: #e6eef6;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .8);
   }
-  #threadbar button {
-    background: var(--panel-2);
-    color: var(--accent);
-    border: 1px solid #2c3540;
-    border-radius: 7px;
-    padding: 3px 10px;
-    font-size: 12.5px;
-    font-weight: 550;
+  /* rulebox slab: cold blued steel, gold engraving stays */
+  body.steel .rulebox {
+    background: var(--noise), var(--tex-steel-coarse), #1d2227;
+    color: #ccd6e0;
+    box-shadow: inset 1px 0 0 #38424c,
+                inset -1px 0 0 #05070a,
+                inset 0 1px 0 #4a5661,
+                inset 3px 3px 6px rgba(0, 0, 0, .7),
+                inset -1px -1px 0 rgba(160, 190, 220, .06);
   }
-  #threadbar button:active { background: #2a333d; }
-  a.rule { color: var(--accent); text-decoration: none; cursor: pointer; }
-  a.rule:hover { text-decoration: underline; }
-  a.card { color: var(--card); text-decoration: none; }
-  a.card:visited { color: var(--card); }
-  .rulebox {
-    margin: 8px 0 2px;
-    padding: 8px 10px;
-    background: var(--panel-2);
-    border-left: 3px solid var(--accent);
-    border-radius: 6px;
-    font-size: 14px;
-    white-space: pre-wrap;
+  /* modals: steel vault doors */
+  body.steel #gate .inner, body.steel #deckpanel .inner {
+    background: var(--noise), var(--tex-steel), var(--tex-steel-coarse),
+                linear-gradient(180deg, #3b434c, #1a1f25);
+    box-shadow: inset 0 0 0 3px #10141a, inset 0 0 0 4px #9aa9ba,
+                inset 0 3px 10px rgba(0, 0, 0, .8),
+                0 14px 50px rgba(0, 0, 0, .85), 0 0 80px rgba(0, 0, 0, .6);
   }
-  .rulebox .num { color: var(--accent); font-weight: 650; }
-  form {
-    display: flex;
-    gap: 8px;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid #232b34;
-    background: var(--panel);
+  body.steel #gate h2, body.steel #deckpanel h2 {
+    color: #d7e4ef;
+    text-shadow: 0 -1px 0 #66788a, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9);
   }
-  #composer.attached { border-top: none; }  /* hint bar above owns it */
-  form input {
-    flex: 1;
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 10px;
-    padding: 11px 14px;
-    font: inherit;
+  body.steel #gate p, body.steel #deckpanel p { color: #cdd7e2; }
+  /* viewport in steel mode: silver rivets, cold ambient glow */
+  body.steel main {
+    background:
+      radial-gradient(circle at 8px 8px, #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) no-repeat,
+      radial-gradient(circle at calc(100% - 8px) 8px, #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) 100% 0 no-repeat,
+      radial-gradient(circle at 8px calc(100% - 8px), #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) 0 100% no-repeat,
+      radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) 100% 100% no-repeat,
+      radial-gradient(60% 30% at 50% 0%, rgba(160, 205, 245, .1), transparent 70%),
+      var(--noise), var(--tex-stone), #13151a;
   }
-  form button {
-    background: var(--accent);
-    color: #06121b;
-    border: 0;
-    border-radius: 10px;
-    padding: 11px 16px;
-    font: inherit;
-    font-weight: 650;
+  /* remaining gold carryovers -> cool equivalents */
+  body.steel .sysnote {
+    color: #b9cde0;
+    text-shadow: 0 1px 0 #000, 0 0 8px rgba(150, 200, 240, .3);
   }
-  form button:disabled { opacity: .45; }
-  #deckbtn {
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
+  body.steel ::placeholder { color: #8b96a0; }
+  body.steel form input:focus, body.steel #deckpanel textarea:focus,
+  body.steel #gate input:focus {
+    border-color: #6f8ba3;
+    box-shadow: inset 2px 2px 6px rgba(0, 0, 0, .85),
+                inset -1px -1px 0 rgba(190, 220, 245, .08),
+                0 0 0 1px #86a8c6, 0 0 10px rgba(140, 195, 240, .35);
   }
-  #deckbtn.has-deck {
-    color: var(--accent);
-    border-color: #3b5166;
+  /* answers in steel mode: cold ledger paper instead of parchment */
+  body.steel .answer {
+    background: var(--noise),
+                radial-gradient(130% 110% at 50% 0, #eef1f4, #d9dee4 70%, #c7cdd5);
+    border: 1px solid #5d6a77;
+    color: #26303b;
   }
-  #deckpanel .inner textarea {
-    width: 100%;
-    height: 220px;
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 10px;
-    padding: 10px 12px;
-    font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
-    margin-bottom: 12px;
-    resize: vertical;
+  body.steel .answer::after {  /* pewter seal */
+    background: radial-gradient(circle at 36% 30%, #eef4fa, #9fb0bf 45%, #5b6a78 78%, #2c343d);
   }
-  #deckpanel .inner .row { display: flex; gap: 8px; }
-  #deckpanel .inner .row button {
-    flex: 1;
-    background: var(--accent);
-    color: #06121b;
-    border: 0;
-    border-radius: 10px;
-    padding: 10px;
-    font: inherit;
-    font-weight: 650;
+  body.steel .answer a.rule { color: #2f517d; text-shadow: none; }
+  body.steel .answer a.rule:hover { color: #22405f; }
+  body.steel .answer a.card,
+  body.steel .answer a.card:visited { color: #274e8d; text-shadow: none; }
+  body.steel .answer .footer {
+    border-top: 1px solid #a8b4c0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    color: #3f4b58;
   }
-  #deckpanel .inner .row button.cancel {
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
+  body.steel .answer summary { color: #3f4b58; }
+  body.steel .answer summary:hover { color: #2f3b48; }
+  body.steel .answer details pre {
+    background: rgba(40, 50, 60, .07);
+    color: #34404d;
   }
-  #gate, #deckpanel {
-    position: fixed; inset: 0;
-    background: rgba(8, 11, 14, .92);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+  body.steel ::selection { background: #2b4a52; }
+  /* ---- working indicator: gold orbs -------------------------------------- */
+  /* working indicator: a flipping hourglass. The glass frame rotates
+     end-over-end; the sand pile is gravity-fixed (outside the rotating
+     element) so it always sits in the visual bottom bulb. */
+  .hourglass {
+    display: inline-block; position: relative;
+    width: 16px; height: 24px;
+    margin-left: 8px; vertical-align: -5px;
+    --hg-frame: #6b4a14;   /* bronze glass, wood theme */
+    --hg-sand: #f2cf7c;     /* gold sand */
   }
-  #gate .inner, #deckpanel .inner {
-    background: var(--panel);
-    border: 1px solid #2c3540;
-    border-radius: 14px;
-    padding: 22px;
-    max-width: 380px;
+  .hourglass .frame {
+    position: absolute; inset: 0;
+    background: var(--hg-frame);
+    clip-path: polygon(0 0, 100% 0, 50% 50%, 100% 100%, 0 100%);
+    animation: hg-flip 2.6s infinite;
   }
-  #gate h2, #deckpanel h2 { margin: 0 0 8px; font-size: 17px; color: var(--accent); }
-  #gate p, #deckpanel p { margin: 0 0 14px; color: var(--dim); font-size: 13.5px; }
-  #gate input {
-    width: 100%;
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 10px;
-    padding: 11px 12px;
-    font: inherit;
-    margin-bottom: 12px;
+  .hourglass .sand {
+    position: absolute; inset: 0;
+    background: var(--hg-sand);
+    clip-path: polygon(50% 54%, 11% 96%, 89% 96%);
+    animation: hg-glint 2.6s infinite;
   }
-  #gate button {
-    width: 100%;
-    background: var(--accent);
-    color: #06121b;
-    border: 0;
-    border-radius: 10px;
-    padding: 11px;
-    font: inherit;
-    font-weight: 650;
+  .hourglass .sand::before {  /* falling stream through the neck */
+    content: ""; position: absolute; left: 50%; top: 10%;
+    height: 42%; width: 2px; margin-left: -1px;
+    background: var(--hg-sand);
+    animation: hg-stream 2.6s infinite;
   }
-  #gate .msg { margin: 0 0 12px; font-size: 13.5px; }
-  .hidden { display: none !important; }
-  .dots { display: inline-flex; gap: 4px; margin-left: 8px;
-          vertical-align: middle; }
-  .dots i {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--accent);
-    opacity: .25;
-    animation: dotpulse 1.2s infinite ease-in-out;
+  body.steel .hourglass {
+    --hg-frame: #77879a;    /* pewter glass */
+    --hg-sand: #d7e4ef;     /* silvered sand */
   }
-  .dots i:nth-child(2) { animation-delay: .2s; }
-  .dots i:nth-child(3) { animation-delay: .4s; }
-  @keyframes dotpulse {
-    0%, 60%, 100% { opacity: .22; transform: translateY(0); }
-    30% { opacity: 1; transform: translateY(-3px); }
+  @keyframes hg-flip {
+    0%, 46%   { transform: rotate(0deg); }
+    54%, 96%  { transform: rotate(180deg); }
+    100%      { transform: rotate(360deg); }
+  }
+  @keyframes hg-glint {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.3); }
+  }
+  @keyframes hg-stream {
+    0%, 52%, 100% { opacity: 0; }
+    8%, 44%       { opacity: .9; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .dots i { animation: none; opacity: .6; }
+    .hourglass .frame, .hourglass .sand, .hourglass .sand::before {
+      animation: none;
+    }
+    .hourglass .sand::before { opacity: 0; }
+    header button:active, #deckbtn:active,
+    #deckpanel .row button.cancel:active,
+    form button:active, #gate button:active,
+    #deckpanel .row button:active, #threadbar button:active { transform: none; }
   }
 </style>
 </head>
@@ -278,21 +702,22 @@
 <header>
   <h1>oragle</h1>
   <span class="sub" id="crdate">MTG rules judge</span>
+  <button id="themebtn" type="button">Steel</button>
   <button id="newthread" type="button">New thread</button>
 </header>
-<main id="chat"></main>
-<div id="threadbar" class="hidden">
+<main id="chat" aria-label="conversation"></main>
+<div id="threadbar" role="region" aria-label="thread hint" class="hidden">
   This thread keeps earlier questions in context — good for follow-ups,
   but it costs and can muddy answers on a new topic.
   <button id="barnew" type="button">New thread</button>
 </div>
-<form id="composer" autocomplete="off">
-  <input id="q" placeholder="Ask a rules question…" autocomplete="off"
+<form id="composer" aria-label="ask a question" autocomplete="off">
+  <input id="q" placeholder="Ask a rules question…" aria-label="rules question" autocomplete="off"
          autocapitalize="sentences" enterkeyhint="send">
   <button id="deckbtn" type="button">Deck</button>
   <button id="send" type="submit">Ask</button>
 </form>
-<div id="deckpanel" class="hidden">
+<div id="deckpanel" role="dialog" aria-label="attach a decklist" class="hidden">
   <div class="inner">
     <h2>attach a decklist</h2>
     <p>Paste in any common format — Arena or MTGO export, "4 Card" counts,
@@ -302,22 +727,22 @@
        are these two cards legal together, what happens when they meet.
        This is not a deck advisor — it cannot evaluate a list, compare
        it to cards you didn't paste, or suggest cuts.</p>
-    <textarea id="decktext" spellcheck="false"></textarea>
+    <textarea id="decktext" aria-label="decklist" spellcheck="false"></textarea>
     <div class="row">
       <button id="deckadd" type="button">Attach</button>
       <button id="deckcancel" class="cancel" type="button">Cancel</button>
     </div>
   </div>
 </div>
-<div id="status"></div>
+<div id="status" role="status" aria-live="polite"></div>
 
-<div id="gate">
+<div id="gate" role="dialog" aria-label="oracle access">
   <div class="inner">
     <h2>oracle access</h2>
     <p>Paste your personal access token. It is stored only in this
        browser (localStorage) and sent with each request.</p>
     <div class="msg" id="gatemsg"></div>
-    <input id="token" placeholder="access token" autocapitalize="off"
+    <input id="token" placeholder="access token" aria-label="access token" autocapitalize="off"
            autocorrect="off" spellcheck="false">
     <button id="gatebtn" type="button">Connect</button>
   </div>
@@ -327,7 +752,10 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const status = $("status"), chat = $("chat");
-let threadId = localStorage.getItem("oragle_thread") || null;
+// Threads are per page session, deliberately NOT persisted: a new
+// browser session resuming an old conversation is context bleed the
+// user explicitly does not want. The first question starts a thread.
+let threadId = null;
 let token = localStorage.getItem("oragle_token") || "";
 let running = false;
 
@@ -336,7 +764,7 @@ function setStatus(text, cls, dots) {
   status.className = cls || "";
   if (dots) {
     status.insertAdjacentHTML("beforeend",
-        ' <span class="dots"><i></i><i></i><i></i></span>');
+        ' ' + '<span class="hourglass" role="img" aria-label="working"><i class="frame"></i><i class="sand"></i></span>');
   }
 }
 
@@ -453,11 +881,11 @@ function showThreadbar(show) {
   $("composer").classList.toggle("attached", show);
 }
 
-// The header button is the context-free escape hatch for the windows the
-// threadbar doesn't cover: a persisted thread id restored on page load,
-// and changing your mind mid-answer once you now know better. It shows
-// only when there is an active thread to leave; a fresh page with no
-// thread stays minimal.
+// The header button is the context-free escape hatch for the windows
+// the threadbar doesn't cover: changing your mind mid-conversation,
+// or asking a genuinely unrelated follow-up once you know better. It
+// shows only when there is an active thread to leave; a fresh page
+// never has one.
 function syncNewThreadButton() {
   $("newthread").classList.toggle("hidden", !threadId);
 }
@@ -499,7 +927,7 @@ async function ask(question) {
     note("decklist attached: " + deckLines + " lines");
   }
   const answerBox = addBubble(
-      "answer", '<span class="dots"><i></i><i></i><i></i></span>');
+      "answer", '<span class="hourglass" role="img" aria-label="working"><i class="frame"></i><i class="sand"></i></span>');
   let lastEvent = null;
   try {
     const t0 = Date.now();
@@ -517,7 +945,6 @@ async function ask(question) {
     }
     if (r.body.thread !== threadId && r.body.thread) {
       threadId = r.body.thread;
-      localStorage.setItem("oragle_thread", threadId);
       syncNewThreadButton();
     }
     while (true) {
@@ -665,6 +1092,18 @@ $("newthread").addEventListener("click", () => {
   note("— new thread started (fresh context) —");
 });
 
+// ---- theme toggle: wood & leather or cold steel ---------------------
+let theme = localStorage.getItem("oragle_theme") || "wood";
+function applyTheme() {
+  document.body.classList.toggle("steel", theme === "steel");
+  $("themebtn").textContent = theme === "steel" ? "Wood" : "Steel";
+}
+$("themebtn").addEventListener("click", () => {
+  theme = theme === "steel" ? "wood" : "steel";
+  localStorage.setItem("oragle_theme", theme);
+  applyTheme();
+});
+
 $("barnew").addEventListener("click", () => $("newthread").click());
 
 (async () => {
@@ -672,6 +1111,7 @@ $("barnew").addEventListener("click", () => $("newthread").click());
     $("gate").classList.add("hidden");
   }
   restoreNotes();
+  applyTheme();
   syncNewThreadButton();  // stale thread id in localStorage? show the exit
   await connect();
 })();

@@ -223,6 +223,102 @@ swap, threadbar, ruleboxes) snapshots isNearBottom() BEFORE the
 mutation and forces the scroll after it. Verified both ways: at-bottom
 follows the answer to the pixel; scrolled up mid-answer stays put.
 
+90s-game-UI theme (2026-11-20, branch mtgo-theme): full reskin of the
+style block only — markup and JS untouched (fake-pipeline server +
+headless Chromium verified computed styles, both autoscroll
+behaviors, gate/chat/deck screenshots). First pass: flat "sleek
+business" look. Second pass, after user feedback ("gaudy,
+fantasy-immersive, textures — brick, wood, steel, jade"): all
+materials are procedural inline-SVG turbulence data URIs + CSS
+gradients, no binary assets. Behind everything a staggered dark
+brick wall; header/composer as carved hardwood beams (stretched
+turbulence grain); the chat is a framed dungeon-stone viewport with
+bolted brass corner rivets (positioned radial-gradient studs in the
+background, which do not scroll with content) and a warm torch glow
+at the top. Answers are aged parchment sheets (stain blotches +
+speckle over a cream radial, dark ink serif text, citation links
+recolored umber/blue for light background) with a gold wax-seal
+medallion pressed on the top corner (.answer::after — pseudo
+elements survive innerHTML swaps); ruleboxes are carved stone slabs
+with a gold edge; user bubbles are oiled leather with irregular
+radii. Buttons: engraved brass plaques (inset bevels, glow on hover,
+bevel inverts when pressed) and jade gemstone primaries (specular
+highlight + glow). Modals are oaken doors (double inset ring reads
+as brass inlay). Status/threadbar rails: brushed brass. Gold pulsing
+orbs for the working dots. Parchment/background-colors chosen for
+contrast (ink #32220f on cream; #ded0ae on stone). Third pass (same
+day, user feedback): jade primaries are now lozenges (border-radius
+999px) and Ask is the oversized centerpiece (14px caps, wide
+padding, stronger glow). Cold-steel variant (body.steel, header
+toggle button, persisted in localStorage oragle_theme): wood/leather
+swap to blued steel — wall becomes riveted steel plate (repeating-
+gradient seams + coarse forge blotches + brushed streaks), header/
+composer are riveted beams, secondary buttons are big BLOCKY metal
+slabs (border-radius 0, hard multi-step chisel bevels with zero
+blur, sharp unblurred 2px 3px drop shadows that collapse on press),
+the user bubble is a corner-riveted steel plate, the rulebox cold
+blued steel with gold engraving, modals are steel vault doors. Jade
+and parchment stay untouched in both themes. The stone viewport
+turbulence seam is visible at tile edges — user verdict: charming,
+left as is. Steel polish pass (user-reported gold carryovers + top
+bar contrast): header/form beams brightened (mid-steel #5b646e with
+a #d5e0ea top rail, near-white title, #b6c5d4 sub) so they separate
+from the dark plate wall; viewport rivets silver (#e8f1fa ring),
+ambient glow icy instead of torch-warm, stone base cool-tinted;
+sysnote (italic + glow) cool blue; placeholder #63727f; input focus
+ring icy blue (verified via CDP Emulation.setFocusEmulationEnabled
+— plain headless does not apply :focus, worth remembering when
+checking focus styles).
+
+Accessibility audit (2026-11-20): dev/a11y_check.py spins the fake-
+pipeline server, drives headless Chromium + CDP, injects axe-core
+(cached at /tmp/axe.min.js) and reports WCAG violations for both
+themes; focus emulation on. Findings fixed: aria-labels on the three
+form fields (question/decklist/token); roles — threadbar region,
+composer form named, modals are dialogs, main aria-labelled, and
+status is role=status aria-live=polite (screen readers now hear the
+working/done states). Contrast: axe cannot resolve bg through
+gradients/textures (reports "needs review"), so ratios are computed
+manually against the worst-case gradient stop — six pairs were
+under 4.5 and were recolored: wood .sub 3.88 -> 5.01 (#cbb890),
+steel .sub 3.26 -> 4.62 (#e2e8ee), both placeholders 3.3 -> 5.3
+(#9e947c / #8b96a0), steel status/threadbar 4.16 -> 5.18 (#b8c4d2),
+parchment footer/summary 4.08 -> 4.97 (#5a4623). All remaining
+header pairs measure 5.3-6.6. Rerun: `uv run --with websocket-client
+python dev/a11y_check.py`.
+
+Fourth theme pass (user-reported): jade buttons measured ~1.9:1 at
+the gradient's dark bottom with dark text — the gem goes a shade
+deeper (#157f63 -> #085741 range) and the text is now engraved white
+(4.6 at the lightest stop, 7.7 at the darkest); hover keeps the face
+and brightens glow/text instead of lightening the gradient (which
+broke 4.5). Wood modal leaf text #e4d6ab (8.0), steel #cdd7e2 (6.3).
+Steel beam darkened (#4a525b) so the sub-line has real margin (6.0).
+Steel answers are no longer parchment: cold ledger-paper sheets
+(steel-blue links, pewter wax seal, slate ink #26303b at 7.4 on the
+darkest paper shade). The three bouncing dots are replaced by a CSS
+hourglass: the glass frame (clip-path bowtie, bronze in wood / pewter
+in steel) flips end-over-end every 2.6s while a separate gravity-fixed
+sand pile (gold/silver) glints and a stream falls through the neck —
+the sand element sits OUTSIDE the rotating element so the pile always
+stays in the visual bottom bulb through the flip.
+prefers-reduced-motion freezes it to a static hourglass.
+Context bleed fix (2026-11-20, user-reported: "new session said hello,
+asked about the old topic"): two causes. The web client persisted the
+thread id in localStorage and restored it on every page load, and the
+server never evicted conversation threads — so a fresh browser session
+silently resumed the entire old conversation (history + carried
+blocks). Both fixed per the project principle that continuing a
+conversation must be deliberate: thread ids are now per page session
+only (never written to localStorage; the removeItem in the New-thread
+handler stays as legacy cleanup), and Hub._prune_locked evicts threads
+idle > THREAD_TTL_SECONDS (2h; an expired client id just starts a
+fresh thread via thread_or_new, which already handled unknown ids).
+Trade-off accepted deliberately: a mid-conversation page refresh now
+starts a new thread too. On the Render deploy this changes little —
+the server sleeps every 15 min anyway.
+
+
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO
 exports, "N Card"/"Nx"/"xN" counts, set suffixes, comments, SECTION

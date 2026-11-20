@@ -24,6 +24,7 @@ from . import carddb, cards, cli, cr, llm, search, store
 
 WEB_DIR = Path(__file__).parent / "web"
 MAX_JOBS = 500  # oldest finished jobs pruned; single-user app
+THREAD_TTL_SECONDS = 2 * 60 * 60  # idle conversation threads
 
 
 class EventSpinner:
@@ -72,7 +73,8 @@ class Hub:
     def new_thread(self):
         thread_id = uuid.uuid4().hex[:12]
         with self.lock:
-            self.threads[thread_id] = {"history": [], "prior_blocks": []}
+            self.threads[thread_id] = {"history": [], "prior_blocks": [],
+                                       "last_used": time.time()}
         return thread_id
 
     def thread_or_new(self, thread_id):
@@ -85,6 +87,8 @@ class Hub:
 
     def submit(self, question, thread_id, sync=False):
         thread_id, created = self.thread_or_new(thread_id)
+        with self.lock:
+            self.threads[thread_id]["last_used"] = time.time()
         job_id = uuid.uuid4().hex[:12]
         job = {
             "id": job_id,
@@ -172,6 +176,14 @@ class Hub:
             if j["status"] in ("done", "error"))
         for _t, jid in done[:-MAX_JOBS]:
             del self.jobs[jid]
+        # Threads are conversation memory; an old thread continuing after
+        # hours of silence is exactly the context bleed users complain
+        # about. Idle threads are evicted (an old client id simply starts
+        # a fresh thread via thread_or_new), so state cannot grow forever.
+        cutoff = time.time() - THREAD_TTL_SECONDS
+        for tid in [t for t, s in self.threads.items()
+                    if s.get("last_used", 0) < cutoff]:
+            del self.threads[tid]
 
 
 class Handler(BaseHTTPRequestHandler):
