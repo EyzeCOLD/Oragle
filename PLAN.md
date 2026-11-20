@@ -226,15 +226,27 @@ follows the answer to the pixel; scrolled up mid-answer stays put.
 90s-game-UI theme (2026-11-20, branch mtgo-theme): full reskin of the
 style block only — markup and JS untouched (fake-pipeline server +
 headless Chromium verified computed styles, both autoscroll
-behaviors, gate/chat/deck screenshots). Late-90s video game chrome:
-near-black warm background with fractal-noise texture (inline SVG
-data URI, cheap and offline), graphite-brown raised panels with
-1px black outlines and light-top/dark-bottom bevels, embossed
-buttons (uppercase, pressed = inverted bevel + 1px dip), gold
-gradient primary actions, sunken dark wells for chat/inputs/status,
-gold rule links and rulebox edge, serif letter-spaced "ORACLE"
-header, styled scrollbars, gold selection color. prefers-reduced-
-motion also disables the pressed-dip transform.
+behaviors, gate/chat/deck screenshots). First pass: flat "sleek
+business" look. Second pass, after user feedback ("gaudy,
+fantasy-immersive, textures — brick, wood, steel, jade"): all
+materials are procedural inline-SVG turbulence data URIs + CSS
+gradients, no binary assets. Behind everything a staggered dark
+brick wall; header/composer as carved hardwood beams (stretched
+turbulence grain); the chat is a framed dungeon-stone viewport with
+bolted brass corner rivets (positioned radial-gradient studs in the
+background, which do not scroll with content) and a warm torch glow
+at the top. Answers are aged parchment sheets (stain blotches +
+speckle over a cream radial, dark ink serif text, citation links
+recolored umber/blue for light background) with a gold wax-seal
+medallion pressed on the top corner (.answer::after — pseudo
+elements survive innerHTML swaps); ruleboxes are carved stone slabs
+with a gold edge; user bubbles are oiled leather with irregular
+radii. Buttons: engraved brass plaques (inset bevels, glow on hover,
+bevel inverts when pressed) and jade gemstone primaries (specular
+highlight + glow). Modals are oaken doors (double inset ring reads
+as brass inlay). Status/threadbar rails: brushed brass. Gold pulsing
+orbs for the working dots. Parchment/background-colors chosen for
+contrast (ink #32220f on cream; #ded0ae on stone).
 
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO
