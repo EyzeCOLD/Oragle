@@ -204,8 +204,9 @@ class ApiTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             sym_dir = Path(tmp) / "symbols"
             with _mock.patch.object(sym_mod, "SYMBOL_DIR", sym_dir):
-                # uncached + offline = 404, no auth needed to see it
-                req = urllib.request.Request(self.base + "/symbol/T.svg")
+                # unbaked + uncached + offline = 404 (baked icons like T
+                # serve offline forever), no auth needed to see it
+                req = urllib.request.Request(self.base + "/symbol/ZZ.svg")
                 with self.assertRaises(urllib.error.HTTPError) as ctx:
                     urllib.request.urlopen(req, timeout=5)
                 self.assertEqual(ctx.exception.code, 404)
@@ -220,14 +221,14 @@ class ApiTest(unittest.TestCase):
 
                 # a cached icon serves with the SVG type and cache header
                 sym_dir.mkdir(parents=True, exist_ok=True)
-                (sym_dir / "T.svg").write_bytes(b"<svg>tap</svg>")
+                (sym_dir / "ZZ.svg").write_bytes(b"<svg>icon</svg>")
                 with urllib.request.urlopen(
-                        self.base + "/symbol/T.svg", timeout=5) as resp:
+                        self.base + "/symbol/ZZ.svg", timeout=5) as resp:
                     self.assertEqual(resp.status, 200)
                     self.assertEqual(resp.headers["Content-Type"],
                                      "image/svg+xml")
                     self.assertIn("max-age", resp.headers["Cache-Control"])
-                    self.assertEqual(resp.read(), b"<svg>tap</svg>")
+                    self.assertEqual(resp.read(), b"<svg>icon</svg>")
 
 
 if __name__ == "__main__":

@@ -448,6 +448,7 @@
   #gate input { width: 100%; margin-bottom: 12px; }
   #gate button { width: 100%; padding: 11px; }
   #gate .msg { margin: 0 0 12px; font-size: 13.5px; color: var(--err); }
+  #gate .credit { margin: -6px 0 12px; font-size: 11px; opacity: .75; }
   .hidden { display: none !important; }
 
   /* ---- status strip: dark metal rail ----------------------------------- */
@@ -652,30 +653,22 @@
     display: inline-block; position: relative;
     width: 16px; height: 24px;
     margin-left: 8px; vertical-align: -5px;
-    --hg-frame: #6b4a14;   /* bronze glass, wood theme */
-    --hg-sand: #f2cf7c;     /* gold sand */
   }
   .hourglass .frame {
     position: absolute; inset: 0;
-    background: var(--hg-frame);
-    clip-path: polygon(0 0, 100% 0, 50% 50%, 100% 100%, 0 100%);
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%238a611d'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%238a611d'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%236b4a14'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%236b4a14'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%23f2cf7c' fill-opacity='.24' stroke='%23f2cf7c' stroke-opacity='.55' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%23f2cf7c' fill-opacity='.24' stroke='%23f2cf7c' stroke-opacity='.55' stroke-width='.8'/%3E%3C/svg%3E") center/100% 100% no-repeat;
     animation: hg-flip 2.6s infinite;
   }
   .hourglass .sand {
     position: absolute; inset: 0;
-    background: var(--hg-sand);
-    clip-path: polygon(50% 54%, 11% 96%, 89% 96%);
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%23f2cf7c' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%23f2cf7c'/%3E%3C/svg%3E") center/100% 100% no-repeat;
     animation: hg-glint 2.6s infinite;
   }
-  .hourglass .sand::before {  /* falling stream through the neck */
-    content: ""; position: absolute; left: 50%; top: 10%;
-    height: 42%; width: 2px; margin-left: -1px;
-    background: var(--hg-sand);
-    animation: hg-stream 2.6s infinite;
+  body.steel .hourglass .frame {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%2377879a'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%2377879a'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%234d5a68'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%234d5a68'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%23d7e4ef' fill-opacity='.2' stroke='%23d7e4ef' stroke-opacity='.55' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%23d7e4ef' fill-opacity='.2' stroke='%23d7e4ef' stroke-opacity='.55' stroke-width='.8'/%3E%3C/svg%3E");
   }
-  body.steel .hourglass {
-    --hg-frame: #77879a;    /* pewter glass */
-    --hg-sand: #d7e4ef;     /* silvered sand */
+  body.steel .hourglass .sand {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%23d7e4ef' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%23d7e4ef'/%3E%3C/svg%3E");
   }
   @keyframes hg-flip {
     0%, 46%   { transform: rotate(0deg); }
@@ -683,18 +676,13 @@
     100%      { transform: rotate(360deg); }
   }
   @keyframes hg-glint {
-    0%, 100% { filter: brightness(1); }
-    50%      { filter: brightness(1.3); }
-  }
-  @keyframes hg-stream {
-    0%, 52%, 100% { opacity: 0; }
-    8%, 44%       { opacity: .9; }
+    0%, 100% { filter: brightness(1) opacity(1); }
+    50%      { filter: brightness(1.4) opacity(.9); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .hourglass .frame, .hourglass .sand, .hourglass .sand::before {
+    .hourglass .frame, .hourglass .sand {
       animation: none;
     }
-    .hourglass .sand::before { opacity: 0; }
     header button:active, #deckbtn:active,
     #deckpanel .row button.cancel:active,
     form button:active, #gate button:active,
@@ -745,6 +733,7 @@
     <h2>oracle access</h2>
     <p>Paste your personal access token. It is stored only in this
        browser (localStorage) and sent with each request.</p>
+    <p class="credit">Card symbols and data courtesy of Scryfall.</p>
     <div class="msg" id="gatemsg"></div>
     <input id="token" placeholder="access token" aria-label="access token" autocapitalize="off"
            autocorrect="off" spellcheck="false">
@@ -814,10 +803,16 @@ async function connect() {
 // are the brace content with the slash removed, keeping Scryfall's
 // capital-letter casing: {W/U} -> "WU", {T} -> "T". Unknown braces stay literal text; if a known code has no SVG
 // yet (offline first hit), the img falls back to the literal {text}.
+const // the ten official hybrid pair orders ({U/W} is {W/U})
+    HYBRID_CANON = {UW: "WU", BW: "WB", BU: "UB", RU: "UR", RB: "BR",
+                    GB: "BG", GR: "RG", WR: "RW", WG: "GW", UG: "GU"};
+
 function symbolCode(inner) {
   const m = inner.toUpperCase().match(
       /^(\d{1,2}|W|U|B|R|G|S|C|X|Y|Z|T|Q)(\/(2|W|U|B|R|G|P))?$/);
-  return m ? (m[1] + (m[3] || "")) : null;  // scryfall SVGs are capitalized
+  if (!m) return null;
+  const code = m[1] + (m[3] || "");  // scryfall SVGs are capitalized
+  return HYBRID_CANON[code] || code;
 }
 
 function renderSymbols(html) {

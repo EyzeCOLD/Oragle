@@ -303,6 +303,14 @@ sand pile (gold/silver) glints and a stream falls through the neck —
 the sand element sits OUTSIDE the rotating element so the pile always
 stays in the visual bottom bulb through the flip.
 prefers-reduced-motion freezes it to a static hourglass.
+2026-11-20 redesign (user: "doesn't look like an hourglass at all"):
+the clip-path bowtie is replaced by hourglasses drawn as SVG data-URIs —
+a frame layer (caps, side posts, curved glass bulbs; bronze in wood,
+pewter in steel via body.steel overrides) that still carries the
+hg-flip rotation, and a sand layer (baked stream + curved pile) that
+stays gravity-fixed outside the rotation and glints via the hg-glint
+keyframe (brightness + opacity). The old ::before sand trick and
+hg-stream keyframes are gone. Reduced-motion still freezes it.
 Card symbols in the web frontend (2026-11-20, symbol-rendering branch):
 {2}{U/R}{U} in answers and expanded rulebox text now render as
 inline Scryfall SVG icons, 1.02em, both themes. Frontend renderSymbols()
@@ -324,6 +332,26 @@ nice), and the em pass is guarded against touching <strong> edges.
 Both applied in renderAnswer and the rulebox expansion. Verified
 headless: 8/8 symbols load with correct srcs, bold/em nested case
 renders, unknown braces literal, axe + autoscroll + 169 tests green.
+
+Symbols pass 2 (2026-11-20, same branch): the icon set is now baked
+into the repo. 59 SVGs (268 KB) from api.scryfall.com/symbology live
+in mtgjudge/web/symbols (0-20, WUBRGSCXQ singles, T, and the canonical
+hybrids/phyrexians in Scryfall's official pairs — WU, UB, BR, RG, GW,
+2W-style, WP/UP/BP/RP/GP). License check: Scryfall serves these under
+the WotC Fan Content Policy, which permits free fan-app use of Wizards
+materials (no paywall, no repackaging); the required attribution is a
+"Card symbols and data courtesy of Scryfall." line in the gate panel
+(#gate .credit). symbols.py lookup order is now baked package dir ->
+DATA_DIR/symbols cache -> one live Scryfall fetch; after this commit
+the standard set never touches the network. Frontend HYBRID_CANON maps
+reversed pairs ({W/U} -> WU etc.) to the ten official orders before
+requesting /symbol/, so users typing hybrids backwards still get the
+right icon. Non-baked codes keep the old cache/fetch path (server test
+uses "ZZ"). Verified headless in both themes: hybrid canon renders
+WU/BG from reversed input, 8/8 baked symbols load, hourglass frame + 
+sand are the drawn SVGs with hg-flip running, 171 tests, axe (two
+pre-existing "needs review" header contrast notes, untouched by this
+branch) and autoscroll green. Screenshots: /tmp/oragle_hg2_*.png.
 
 Context bleed fix (2026-11-20, user-reported: "new session said hello,
 asked about the old topic"): two causes. The web client persisted the
