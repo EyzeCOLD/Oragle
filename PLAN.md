@@ -223,6 +223,19 @@ swap, threadbar, ruleboxes) snapshots isNearBottom() BEFORE the
 mutation and forces the scroll after it. Verified both ways: at-bottom
 follows the answer to the pixel; scrolled up mid-answer stays put.
 
+90s-game-UI theme (2026-11-20, branch mtgo-theme): full reskin of the
+style block only — markup and JS untouched (fake-pipeline server +
+headless Chromium verified computed styles, both autoscroll
+behaviors, gate/chat/deck screenshots). Late-90s video game chrome:
+near-black warm background with fractal-noise texture (inline SVG
+data URI, cheap and offline), graphite-brown raised panels with
+1px black outlines and light-top/dark-bottom bevels, embossed
+buttons (uppercase, pressed = inverted bevel + 1px dip), gold
+gradient primary actions, sunken dark wells for chat/inputs/status,
+gold rule links and rulebox edge, serif letter-spaced "ORACLE"
+header, styled scrollbars, gold selection color. prefers-reduced-
+motion also disables the pressed-dip transform.
+
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO
 exports, "N Card"/"Nx"/"xN" counts, set suffixes, comments, SECTION

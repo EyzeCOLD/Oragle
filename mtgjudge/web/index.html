@@ -5,58 +5,141 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>oragle — MTG rules judge</title>
 <style>
+/*
+ * MTGO-inspired theme: graphite-brown panels with visible black
+ * outlines, bevel-embossed buttons (light top edge / dark bottom
+ * edge, pressed = inverted), sunken chat and inputs, warm parchment
+ * text on a noise-textured surface. Functional selectors are
+ * identical to the previous stylesheet; only the look changes.
+ */
   :root {
-    --bg: #0e1216;
-    --panel: #161c22;
-    --panel-2: #1d242c;
-    --text: #d8e0e8;
-    --dim: #7d8a97;
-    --accent: #56c8ff;
-    --card: #d484ff;
-    --user-bubble: #24446b;
-    --err: #ff8484;
+    --bg: #12100d;
+    --panel: #2b2822;
+    --panel-2: #383329;
+    --inset: #171512;
+    --edge: #070604;
+    --edge-hi: rgba(255, 236, 190, .12);
+    --edge-lo: rgba(0, 0, 0, .55);
+    --text: #e8e0c9;
+    --dim: #a39a80;
+    --accent: #e8bd54;
+    --accent-hi: #f6d97e;
+    --accent-lo: #a87c22;
+    --card: #a9c7ee;
+    --user-bubble: #3d434e;
+    --err: #ff9d7a;
     --hint: #ffd166;
+    /* warm fractal-noise speckle used as a surface texture */
+    --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0 0.70 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
-    background: var(--bg);
+    background: var(--noise),
+                radial-gradient(1200px 600px at 50% -80px, #262019, var(--bg));
     color: var(--text);
     font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     display: flex;
     flex-direction: column;
   }
+  ::selection { background: #6b5219; color: #fff2cc; }
+
+  /* raised chrome: black outline + light top edge, dark bottom edge */
   header {
     display: flex;
     align-items: baseline;
     gap: 12px;
     padding: 12px 16px 10px;
-    border-bottom: 1px solid #232b34;
-    background: var(--panel);
+    border-bottom: 1px solid var(--edge);
+    background: linear-gradient(180deg, #34302a, #282420);
+    box-shadow: inset 0 1px 0 var(--edge-hi),
+                inset 0 -1px 0 rgba(255, 236, 190, .07),
+                0 1px 3px rgba(0, 0, 0, .6);
   }
   header h1 {
-    font-size: 18px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 19px;
     margin: 0;
+    letter-spacing: 2px;
     color: var(--accent);
-    font-weight: 650;
+    text-shadow: 0 1px 0 #000, 0 0 14px rgba(232, 189, 84, .3);
   }
-  header .sub { color: var(--dim); font-size: 12.5px; }
-  header button {
-    margin-left: auto;
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 13.5px;
+  header .sub { color: var(--dim); font-size: 12.5px; letter-spacing: .3px; }
+
+  /* embossed button: gradient body, light inner top, dark inner bottom */
+  header button, #threadbar button, #deckbtn,
+  #deckpanel .row button.cancel {
+    background: linear-gradient(180deg, #403a31, #2b2721 55%, #242019);
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    box-shadow: inset 0 1px 0 var(--edge-hi),
+                inset 0 -1px 0 var(--edge-lo),
+                0 1px 2px rgba(0, 0, 0, .45);
+    color: #d9cfae;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    font-size: 12px;
+    cursor: pointer;
   }
-  header button:active { background: #2a333d; }
+  header button:hover, #threadbar button:hover,
+  #deckbtn:hover, #deckpanel .row button.cancel:hover {
+    background: linear-gradient(180deg, #4c453a, #343027 55%, #28231c);
+    color: var(--accent-hi);
+  }
+  header button:active, #threadbar button:active,
+  #deckbtn:active, #deckpanel .row button.cancel:active {
+    /* pressed: bevel inverts (debossed), body darkens */
+    background: linear-gradient(180deg, #201d17, #2d2822);
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, .6),
+                inset 0 -1px 0 var(--edge-hi);
+    color: #c9bd97;
+    transform: translateY(1px);
+  }
+  header button { margin-left: auto; padding: 6px 12px; font-size: 12px; }
+
+  /* primary action: gold, like MTGO's main buttons */
+  form button, #gate button, #deckpanel .row button {
+    background: linear-gradient(180deg, #f4d783, #e0b24e 55%, #b7882f);
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55),
+                inset 0 -1px 0 rgba(0, 0, 0, .3),
+                0 1px 3px rgba(0, 0, 0, .5);
+    color: #241a05;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  form button:hover, #gate button:hover,
+  #deckpanel .row button:hover {
+    background: linear-gradient(180deg, #fbe49a, #eebd59 55%, #c69235);
+  }
+  form button:active, #gate button:active,
+  #deckpanel .row button:active {
+    background: linear-gradient(180deg, #a87e2a, #dcb052);
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, .45),
+                inset 0 -1px 0 rgba(255, 255, 255, .4);
+    transform: translateY(1px);
+  }
+  form button:disabled {
+    opacity: .45;
+    transform: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55),
+                inset 0 -1px 0 rgba(0, 0, 0, .3);
+  }
+
+  /* sunken dark strip below the composer */
   #status {
     padding: 6px 16px calc(8px + env(safe-area-inset-bottom));
     font-size: 12.5px;
     color: var(--dim);
     min-height: 30px;
-    border-top: 1px solid #1a2129;
+    border-top: 1px solid var(--edge);
+    background: linear-gradient(180deg, #141210, #100e0b);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .65);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -64,6 +147,8 @@
   #status .live { color: var(--accent); }
   #status.waking { color: var(--hint); }
   #status.error { color: var(--err); }
+
+  /* the chat reading area: recessed into the chrome, textured */
   main {
     flex: 1;
     overflow-y: auto;
@@ -71,38 +156,59 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    background: var(--noise), var(--inset);
+    box-shadow: inset 0 3px 9px rgba(0, 0, 0, .75),
+                inset 0 -1px 0 rgba(255, 236, 190, .05);
   }
+  main::-webkit-scrollbar { width: 13px; }
+  main::-webkit-scrollbar-track {
+    background: #12100c;
+    border-left: 1px solid var(--edge);
+  }
+  main::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #57492e, #312a19);
+    border: 1px solid var(--edge);
+    box-shadow: inset 0 1px 0 rgba(255, 240, 200, .18);
+  }
+
+  /* messages as bordered plaques, corners nearly square */
   .bubble {
     max-width: 720px;
     width: fit-content;
     padding: 10px 14px;
-    border-radius: 12px;
+    border-radius: 3px;
+    border: 1px solid var(--edge);
+    box-shadow: inset 0 1px 0 var(--edge-hi), 0 1px 2px rgba(0, 0, 0, .5);
     white-space: pre-wrap;
     overflow-wrap: break-word;
   }
   .user {
     align-self: flex-end;
-    background: var(--user-bubble);
-    border-bottom-right-radius: 4px;
+    background: linear-gradient(180deg, #454c59, #323841 60%, #2d323b);
+    border-right: 2px solid var(--edge-lo);
   }
   .answer {
     align-self: flex-start;
     max-width: min(720px, 100%);
-    background: var(--panel);
-    border: 1px solid #232b34;
-    border-bottom-left-radius: 4px;
+    background: linear-gradient(180deg, #312d26, #262218 65%, #221e15);
+    border-left: 3px solid var(--accent-lo);
   }
   .answer.error { border-color: #57323a; color: var(--err); }
   .answer .footer {
     margin-top: 10px;
     padding-top: 8px;
-    border-top: 1px solid #232b34;
+    border-top: 1px solid #0c0b09;
+    box-shadow: inset 0 1px 0 var(--edge-hi);
     color: var(--dim);
     font-size: 12px;
     white-space: normal;
   }
   .answer details { margin-top: 8px; }
-  .answer summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+  .answer summary {
+    cursor: pointer; color: var(--dim); font-size: 12px;
+    text-transform: uppercase; letter-spacing: .4px;
+  }
+  .answer summary:hover { color: var(--accent); }
   .answer details pre {
     margin: 6px 0 0;
     font-size: 12px;
@@ -112,10 +218,13 @@
   }
   .sysnote {
     align-self: center;
-    color: var(--dim);
+    color: var(--accent-lo);
+    font-style: italic;
     font-size: 12.5px;
     padding: 2px 8px;
+    text-shadow: 0 1px 0 #000;
   }
+
   #threadbar {
     display: flex;
     align-items: center;
@@ -124,137 +233,121 @@
     padding: 7px 16px;
     font-size: 12.5px;
     color: var(--dim);
-    border-top: 1px solid #232b34;
-    border-bottom: 1px solid #232b34;
-    background: var(--panel);
+    border-top: 1px solid var(--edge);
+    border-bottom: 1px solid var(--edge);
+    background: linear-gradient(180deg, #322e27, #272320);
+    box-shadow: inset 0 1px 0 var(--edge-hi), inset 0 -1px 0 var(--edge-lo);
   }
-  #threadbar button {
-    background: var(--panel-2);
+  #threadbar button { padding: 3px 10px; color: var(--accent); }
+
+  a.rule {
     color: var(--accent);
-    border: 1px solid #2c3540;
-    border-radius: 7px;
-    padding: 3px 10px;
-    font-size: 12.5px;
-    font-weight: 550;
+    text-decoration: none;
+    cursor: pointer;
+    text-shadow: 0 1px 0 #000;
   }
-  #threadbar button:active { background: #2a333d; }
-  a.rule { color: var(--accent); text-decoration: none; cursor: pointer; }
-  a.rule:hover { text-decoration: underline; }
-  a.card { color: var(--card); text-decoration: none; }
+  a.rule:hover { color: var(--accent-hi); text-decoration: underline; }
+  a.card { color: var(--card); text-decoration: none; text-shadow: 0 1px 0 #000; }
   a.card:visited { color: var(--card); }
+
+  /* expanded rule text: a darker plaque with a gold rule edge */
   .rulebox {
     margin: 8px 0 2px;
     padding: 8px 10px;
-    background: var(--panel-2);
-    border-left: 3px solid var(--accent);
-    border-radius: 6px;
+    background: var(--noise), #221e18;
+    border: 1px solid var(--edge);
+    border-left: 3px solid var(--accent-lo);
+    border-radius: 2px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5),
+                inset 0 -1px 0 var(--edge-hi);
     font-size: 14px;
     white-space: pre-wrap;
   }
   .rulebox .num { color: var(--accent); font-weight: 650; }
+
   form {
     display: flex;
     gap: 8px;
     padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid #232b34;
-    background: var(--panel);
+    border-top: 1px solid var(--edge);
+    background: linear-gradient(180deg, #34302a, #292520);
+    box-shadow: inset 0 1px 0 var(--edge-hi),
+                inset 0 -1px 0 rgba(255, 236, 190, .07);
   }
   #composer.attached { border-top: none; }  /* hint bar above owns it */
-  form input {
-    flex: 1;
-    background: var(--panel-2);
+
+  /* inputs and the decklist textarea: dark wells sunk into the chrome */
+  form input, #deckpanel textarea, #gate input {
+    background: var(--noise), #151310;
     color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 10px;
+    border: 1px solid var(--edge);
+    border-radius: 2px;
+    box-shadow: inset 1px 1px 3px rgba(0, 0, 0, .7),
+                inset -1px -1px 0 rgba(255, 236, 190, .05);
     padding: 11px 14px;
     font: inherit;
   }
-  form button {
-    background: var(--accent);
-    color: #06121b;
-    border: 0;
-    border-radius: 10px;
-    padding: 11px 16px;
-    font: inherit;
-    font-weight: 650;
+  form input:focus, textarea:focus, #gate input:focus {
+    outline: none;
+    border-color: var(--accent-lo);
+    box-shadow: inset 1px 1px 3px rgba(0, 0, 0, .7),
+                inset -1px -1px 0 rgba(255, 236, 190, .05),
+                0 0 0 1px var(--accent-lo);
   }
-  form button:disabled { opacity: .45; }
-  #deckbtn {
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-  }
-  #deckbtn.has-deck {
-    color: var(--accent);
-    border-color: #3b5166;
-  }
+  form input { flex: 1; }
+  form button { padding: 11px 16px; }
+  #deckbtn { padding: 11px 14px; }
+  #deckbtn.has-deck { color: var(--accent); }
+
   #deckpanel .inner textarea {
     width: 100%;
     height: 220px;
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 10px;
-    padding: 10px 12px;
     font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
     margin-bottom: 12px;
     resize: vertical;
   }
   #deckpanel .inner .row { display: flex; gap: 8px; }
-  #deckpanel .inner .row button {
-    flex: 1;
-    background: var(--accent);
-    color: #06121b;
-    border: 0;
-    border-radius: 10px;
-    padding: 10px;
-    font: inherit;
-    font-weight: 650;
-  }
-  #deckpanel .inner .row button.cancel {
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-  }
+  #deckpanel .inner .row button { flex: 1; padding: 10px; }
+  #deckpanel .inner .row button.cancel { padding: 10px; }
+
+  /* modal overlays */
   #gate, #deckpanel {
     position: fixed; inset: 0;
-    background: rgba(8, 11, 14, .92);
+    background: rgba(6, 5, 3, .88);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
   }
   #gate .inner, #deckpanel .inner {
-    background: var(--panel);
-    border: 1px solid #2c3540;
-    border-radius: 14px;
+    background: var(--noise), linear-gradient(180deg, #33302a, #262319);
+    border: 1px solid var(--edge);
+    border-radius: 4px;
     padding: 22px;
     max-width: 380px;
+    box-shadow: inset 0 1px 0 var(--edge-hi),
+                inset 0 -1px 0 var(--edge-lo),
+                0 10px 40px rgba(0, 0, 0, .8);
   }
-  #gate h2, #deckpanel h2 { margin: 0 0 8px; font-size: 17px; color: var(--accent); }
+  #gate h2, #deckpanel h2 {
+    margin: 0 0 8px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 18px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 #000;
+  }
   #gate p, #deckpanel p { margin: 0 0 14px; color: var(--dim); font-size: 13.5px; }
-  #gate input {
-    width: 100%;
-    background: var(--panel-2);
-    color: var(--text);
-    border: 1px solid #2c3540;
-    border-radius: 10px;
-    padding: 11px 12px;
-    font: inherit;
-    margin-bottom: 12px;
+  #gate input { width: 100%; margin-bottom: 12px; }
+  #gate button { width: 100%; padding: 11px; }
+  #gate .msg { margin: 0 0 12px; font-size: 13.5px; color: var(--err); }
+  #deckpanel .inner .row button {
+    background: linear-gradient(180deg, #f4d783, #e0b24e 55%, #b7882f);
+    color: #241a05;
   }
-  #gate button {
-    width: 100%;
-    background: var(--accent);
-    color: #06121b;
-    border: 0;
-    border-radius: 10px;
-    padding: 11px;
-    font: inherit;
-    font-weight: 650;
-  }
-  #gate .msg { margin: 0 0 12px; font-size: 13.5px; }
   .hidden { display: none !important; }
+
   .dots { display: inline-flex; gap: 4px; margin-left: 8px;
           vertical-align: middle; }
   .dots i {
@@ -271,6 +364,10 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .dots i { animation: none; opacity: .6; }
+    form button:active, #gate button:active,
+    #deckpanel .row button:active,
+    header button:active, #threadbar button:active,
+    #deckbtn:active { transform: none; }
   }
 </style>
 </head>
