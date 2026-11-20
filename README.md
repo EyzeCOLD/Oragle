@@ -1,31 +1,69 @@
-# mtg-rules-judge
+# Oragle — MTG rules judge
 
-A local CLI that answers Magic: the Gathering rules questions using keyword
-retrieval (BM25) over the Comprehensive Rules plus Scryfall card data, with an
-LLM that must cite rule numbers. Goal: answers a human can verify by
-citation, not an infallible judge. See `PLAN.md`.
+A local app that answers Magic: the Gathering rules questions with
+**rule-number citations**, grounded in the official Comprehensive Rules and a
+copy of every Oracle card text on your disk. Its goal is answers a human can
+verify by citation — not an infallible judge, and it says so when the rules it
+retrieved don't cover the question.
 
-Built with Python (stdlib only — no third-party runtime dependencies),
-packaged with uv.
+Two frontends, one engine: a terminal CLI (one-shot questions and an
+interactive session) and a small web app you can put behind a token for
+your phone. Everything is local-first: rules and card data live on your
+machine, and the model only ever sees retrieved context.
+
+Built with Python 3.10+ (standard library only — zero runtime
+dependencies), packaged with [uv](https://docs.astral.sh/uv/). Bring your
+own LLM: any OpenAI-compatible API, plus LM Studio or Ollama for fully
+local answering.
 
 ## Setup
 
 ```sh
-uv sync                # creates .venv and installs the local `mtg` command
-oragle refresh     # download + parse + index the Comprehensive Rules
-oragle refresh cards   # build the local card database (~25 MB download)
+git clone https://github.com/EyzeCOLD/Oragle.git
+cd Oragle
+uv sync                     # creates .venv; the `oragle` command is runnable
+
+uv run oragle refresh       # download + parse + index the Comprehensive Rules
+uv run oragle refresh cards # build the local card database (~25 MB download)
+cp .env.example .env        # then edit .env (see below) and put your API key in
 ```
 
-Install it once as a global command (editable, so it tracks this checkout):
+Install the CLI globally (editable, tracks this checkout):
 
 ```sh
 uv tool install --editable .
 oragle ask "does deathtouch ignore damage prevention?"   # works from anywhere
 ```
 
-Both names run the same CLI: `oragle` (installed by `uv tool install`) and
-`uv run mtg` (inside the project). Examples below use `oragle`; substitute
-`uv run mtg` if you haven't installed the tool.
+## Pointing it at your LLM
+
+Oragle speaks the OpenAI chat-completions protocol, so it works with any
+compatible provider — OpenRouter, OpenAI, Z.ai, Groq, Together, Mistral,
+DeepSeek, ... Set these in `.env` (or your shell):
+
+```sh
+MTG_API_BASE=https://openrouter.ai/api/v1
+MTG_API_KEY=sk-...
+MTG_MODEL=<provider/model-name on your provider>
+```
+
+`MTG_MODEL` is required (or auto-picked from the provider's `/models`
+listing where available). To just try a provider quickly without editing
+files:
+
+```sh
+MTG_API_BASE=... MTG_API_KEY=... MTG_MODEL=... uv run oragle ask "who goes first?"
+```
+
+Local models, no cloud, no key:
+
+- `MTG_BACKEND=lmstudio` — the LM Studio server (Developer tab, `localhost:1234`); uses the first loaded model
+- `MTG_BACKEND=ollama` — `localhost:11434/v1`
+
+`MTG_BACKEND=<name>` also forces a backend when several are configured;
+otherwise oragle auto-detects (custom endpoint first, then a
+`MISTRAL_API_KEY` if set, then local servers). `oragle config` shows
+what it picked and where every setting came from.
 
 ## Commands
 
@@ -38,306 +76,155 @@ oragle card "Lightning Helix" --offline # no network at all
 oragle ask "do blockers assign damage before attackers?" -v
 oragle                                  # interactive session (REPL)
 oragle serve                            # web app on http://127.0.0.1:10000
+oragle cards "c<=2 colors:blue t:instant o:exile legal:pauper"
 ```
 
-## Web app (`serve`)
+### Interactive mode
 
-`oragle serve` runs the same engine as the CLI behind a small stdlib HTTP
-server, with a mobile-friendly chat page (`mtgjudge/web/index.html`)
-served from the same origin:
+Run bare `oragle` for a prompt session (history via readline, `:quit` or
+Ctrl-D to leave). Anything that isn't a `:command` goes through the full
+ask pipeline. Colon commands are quick local lookups that never prompt
+the model — `:rule 704.5j`, `:card Lightning Helix`,
+`:search deathtouch trample`, `:stats`, plus `:backend`/`:model`/
+`:offline`/`:verbose` toggles and Tab completion. A `:` prefix never
+prompts the model: unknown commands print the help, and the bare words
+`quit`/`exit` explain how to actually quit. Piped stdin answers each line
+without prompts.
 
-```sh
-echo 'WEB_TOKEN=pick-a-long-random-string' >> .env
-oragle serve                        # binds 127.0.0.1:10000
-open http://127.0.0.1:10000         # paste the token once; it stays in localStorage
-```
+### Follow-ups, threads, and honesty
 
-Parity with the CLI: same retrieval, conversation memory (threads map to
-REPL sessions; the New-thread button is `:new`), `[[Name]]` card refs,
-progress notes, and both hint lines. Rule numbers in answers are links
-that expand the rule text from the local index; card names link to
-Scryfall. Extra endpoints: `GET /rule?number=`, `GET /search?q=`,
-`GET /card?name=` (the `:rule`/`:search`/`:card` commands over HTTP).
+Questions in a session share context: the last few turns (including the
+rules that were retrieved) carry over, follow-up retrieval reuses the
+session's earlier questions, and the model must still ground every claim
+in the current context blocks with citations. Because that default costs
+money and can muddy a new topic, every answer ends with a dim reminder,
+and `:new` starts a fresh thread.
 
-Deploy (Render free tier, see PLAN.md for the constraints that shaped
-this): the Dockerfile bakes `rules.json` + `cards.db` into the image via
-the normal `refresh` at build time; secrets (`MISTRAL_API_KEY`,
-`WEB_TOKEN`) are Render env vars, never in the image or git. Requests
-are kept short (`POST /ask` returns a job id immediately; the browser
-polls `GET /job/{id}`) because Render's proxy cuts requests off around
-15-60 s while answers take 10-90 s. The page detects the free-tier
-wake-up (sleeps after 15 min idle) via `/health` and says so.
+### Card references
 
-## Interactive mode
-
-Run bare `oragle` for a prompt session (history via readline, Ctrl-D or
-`:quit` to leave):
-
-```
-oragle — MTG rules judge (CR effective November 6, 2026)
-Type a rules question; enter a :command (Tab completes), :quit to exit.
-oragle> does Lightning Helix kill Grizzly Bears?
-...answer with rule citations...
-oragle> :quit
-```
-
-Anything that isn't a `:command` goes through the full ask pipeline
-(citation answers, ambiguous `[[Name]]` refs prompt for a choice).
-Card references are explicit only: wrap a card name in `[[Name]]` —
-plain capitalized words are never auto-detected as cards. If you
-mention a card without brackets, the model fetches its Oracle text
-with its card-search tool (costs one extra round). Colon commands do
-quick local lookups without the LLM: `:rule 704.5j`,
-`:card Lightning Helix`, `:search deathtouch trample`, `:stats`, plus
-session toggles `:backend`, `:model`, `:offline`, `:verbose` — `:help`
-lists them all. A `:` prefix never prompts the model: unknown
-`:commands` print the help instead, and the bare words `quit`/`exit`
-print a "to quit, type `:quit`" reminder. Tab completion covers all
-`:` commands.
-
-### Follow-up questions
-
-Questions in a session share context. The last few turns (question +
-answer + retrieved rules) carry over, so you can ask `who goes first?`
-and then just `I'm asking about two-headed giant` and the follow-up
-resolves against the earlier topic. Follow-up retrieval also reruns the
-search with the session's earlier questions, so topic rules resurface
-even when the follow-up line alone is too vague to retrieve them. The
-status line shows carried blocks as `N carried`.
-
-This stays honest: earlier turns are only replayed to resolve
-references, and the model must still ground every claim in the current
-context blocks with rule-number citations. `:new` resets the
-conversation. Because the shared-context default raises cost and can
-muddy answers on a new topic, every REPL answer ends with a dim
-reminder line: this thread continues with shared context — `:new`
-starts a fresh thread for a new topic.
-
-Piped stdin answers each line as a question, without prompts:
-`echo "does deathtouch ignore damage prevention?" | oragle`.
-
-Output is styled for terminals: bold/italic statements, cyan rule
-citations, magenta card names for every referenced card, dim metadata.
-Colors apply only when stdout is a TTY; `NO_COLOR` disables them and
-`FORCE_COLOR` forces them on (e.g. for previews through pipes).
-
-`ask` accepts inline card references with the `[[Name]]` syntax:
+Card lookups are **explicit**: wrap the name in `[[Name]]`.
 
 ```sh
 oragle ask "does [[Lightning Helix]] kill [[Grizzly Bears]]?"
 ```
 
-Card Oracle text, its Scryfall rulings, and the rules for any keyword
-abilities in the card text (derived from rule 702 headers) are added to the
-retrieved context automatically.
+Oracle text, Scryfall rulings, and keyword-ability rules from the card
+text are added to the context automatically. Capitalized words are never
+auto-detected as cards — if you mention one without brackets, the model
+fetches it with its card-search tool (honest, but one extra model
+round), and the app suggests `[[Name]]` for faster lookup. Ambiguous
+names (`[[Selvala]]`) prompt with a numbered list ordered by popularity;
+piped runs take the default.
 
 ### Decklists
 
-Paste a decklist into the question (or use the web **Deck** button) and
-every card is resolved locally in one deterministic pass — the model gets
-all the Oracle text immediately instead of fetching cards one by one:
+Paste a decklist into the question and every card is resolved locally in
+one pass — the model gets all the Oracle text immediately:
 
 ```sh
-oragle ask "$(printf 'any infinite combos?\n4 Priest of Titania\n20 Mountain (ROE) 187\nStaff of Domination x1\n')"
+oragle ask "$(printf 'any infinite combos here?\n4 Priest of Titania\n20 Mountain (ROE) 187\nStaff of Domination x1\n')"
 ```
 
-Recognized formats: `4 Card` / `4x Card` / `Card x4` counts, MTGO/Scryfall
-set suffixes (`(ROE) 187`, `[ARB] #45`), `//`/`#` comments (line-leading
-only — `Brazen Borrower // Petty Theft` split names are untouched),
-and Arena-style `Deck` / `Commander` / `Sideboard` headers. Detection is
-conservative without markers — three or more counted lines — so ordinary
-questions are never mistaken for a deck; `<deck>...</deck>` markers
-force it (the web button emits them). Each card becomes a `CARD` block
-noting its copies; unresolved names are reported as progress notes.
-Decks cap at 60 unique cards (prompt size); rulings and keyword-rule
-expansion stay reserved for single `[[Name]]` refs, not deck entries.
+Recognized: `4 Card` / `4x Card` / `Card x4` counts, set suffixes
+(`(ROE) 187`), `//`/`#` line-leading comments (split-card names like
+`Brazen Borrower // Petty Theft` are untouched), and Arena-style
+section headers. Decks cap at 60 unique cards. This is for rules
+questions about a list's composition ("does this go infinite?"), not
+deck advice — the model has no metagame data.
 
-**What this is for:** rules questions grounded in a list's composition —
-"does this go infinite?", "does anything here loop", "which of these
-interactions breaks the legend rule". It is not a deck advisor: the bot
-has no metagame model, can't rank cards, and can't suggest cards that
-aren't in front of it, so strategy questions get the usual "not covered
-in the retrieved rules" honesty. A real deck analyzer (metagame data,
-context on why cards are played) is a different project entirely.
+### Speed and progress
 
-**Card references are explicit only.** Capitalized words are never
-auto-detected as cards — early versions did that and could not reliably
-tell a card name from prose (a sentence-starting "Actually" matched the
-joke card *Slobad, Actually Just Fine*). If you mention a card without
-brackets, the model notices the missing CARD block and fetches the
-Oracle text with its `search_cards` tool (`!"Exact Name"` query) —
-honest, but it costs one extra model round, so `[[Name]]` is the fast
-path. The app also reminds you: when an exact-name lookup runs for an
-unbracketed card, the status line suggests surrounding card names like
-`[[Name]]` with brackets for faster lookup (once per answer, interactive
-only).
+Answers stream line by line as the model writes them. Retrieval is
+deterministic and token-free: player slang is expanded to CR vocabulary
+before ranking, format keywords preload their rules, the golden rules
+(101.1, 101.2) are always in context, and rules cited by retrieved rules
+are pulled in up front. The model can run two more retrieval tools
+itself (`search_rules`, always local; `search_cards`, full Scryfall
+syntax, online) when the initial context misses something. A
+stream/timeout watchdog can switch to a fallback model mid-answer.
+Progress, retries, and timing print to stderr.
 
-When a `[[Name]]` reference is ambiguous ([[Selvala]] — several
-cards), interactive `ask` and the REPL prompt with a numbered list
-ordered by EDHREC rank (Scryfall's popularity signal, stored in the
-local card DB) and take the most popular on Enter. Piped runs and
-`bench` skip the prompt and take the default.
-
-## Progress indication & speed
-
-Interactive `ask`/REPL answers **stream line by line as the model writes
-them** (styled as they arrive), so the first lines of an answer usually
-appear within seconds even when the full write-up takes half a minute.
-Piped runs and `bench` stay buffered.
-
-Latency anatomy, roughly: tool rounds dominate. Each round is a full
-model pass over the whole context, so a 1-round answer is fast (~10-40s)
-and a 3+ round answer can take minutes. Retrieval is kept deterministic
-and token-free:
-
-- Slang expansion (kill→destroy, bounce→return to hand, ETB, cmdr, ...)
-  maps player vocabulary to Comprehensive Rules vocabulary before BM25.
-- Format anchors preload format rules (Two-Headed Giant → 810.8a, 805.1;
-  Commander → 903.8, 903.10a).
-- Golden rules (101.1, 101.2 can't-beats-can) are always in context:
-  no other rule cites them, so neither BM25 ranking nor the citation hop
-  can guarantee their presence when a conflict is embedded in a
-  specific-interaction question.
-- A **citation hop**: rules cited by retrieved rules are added to the
-  context up front, so the model rarely needs a `search_rules`
-  round-trip.
-- If the provider cuts a stream or is out of capacity, oragle falls back
-  automatically: a stream closed with nothing delivered -> one buffered
-  retry, HTTP 429 -> one retry; remaining rounds then skip streaming
-  entirely so you don't pay that tax twice.
-- Slow-model watchdog: a streamed attempt with no answer text after
-  `MTG_SLOW_AFTER` seconds (default 75, `0` disables) is abandoned
-  safely — thinking arrives but the answer never starts — and the round
-  is retried on `MTG_FALLBACK_MODEL` (default `mistral-small-latest` on
-  the mistral backend, empty disables). Hard failures (e.g. capacity)
-  get one fallback attempt too. The footer shows which model actually
-  answered.
-
-Progress goes to stderr: the spinner with elapsed model time, event
-lines for model actions (`→ search_rules(...)`, round numbers,
-retries), and a closing timing line
-(`→ done: 2 model round(s), 35s model time, 36.1s total`).
-LLM requests default to 240s (`MTG_LLM_TIMEOUT`).
-
-## Bench
-
-`oragle bench [file]` (default `bench.txt`) runs all questions through
-the ask pipeline, prints each answer live with timing, and writes a
-reviewable markdown report (default `bench-last.md`). Use `--only 1,4` to
-re-run specific questions.
-
-## Card search (`cards` command and model tool)
-
-```sh
-oragle cards "c<=2 colors:blue t:instant o:exile legal:pauper"
-```
-
-Full Scryfall search syntax, live from their API (search is online; card
-*lookups* go to the local DB). `mtg ask` exposes the same search to the LLM
-as a `search_cards` tool, so plain-English discovery questions work:
-
-```sh
-oragle ask "are there any blue instants for 2 mana or less that can exile a creature?"
-```
-
-The model runs a Scryfall query, gets compact results back, and answers
-from them. Use `--offline` to disable the tool.
-
-A second, fully local tool — `search_rules` — lets the model fetch rules the
-initial retrieval missed (legend rule, hybrid mana colors, priority): when
-the context doesn't cover the question, the model searches the Comprehensive
-Rules itself instead of refusing. It works with `--offline` too; only
-`search_cards` needs the network. Tool rounds are bounded (default 3);
-`MTG_LLM_TIMEOUT` controls the LLM request timeout (default 120s, one
-automatic retry on timeout).
-
-## Data on disk
+## Data on disk and staying fresh
 
 Everything lives at `$MTG_DATA_DIR` or `~/.local/share/mtg-rules-judge/`:
 
-- `rules.json` + `comp_rules.txt` — parsed Comprehensive Rules + raw text.
-  `mtg refresh` (or `mtg refresh rules`) re-downloads after a CR release.
-- `cards.db` — SQLite card database built from Scryfall's daily "Oracle
-  Cards" bulk dump (one row per Oracle id, ~16 MB for ~39k cards).
+- `rules.json` — the parsed, indexed Comprehensive Rules. `oragle refresh`
+  re-downloads after a CR release.
+- `cards.db` — SQLite, built from Scryfall's Oracle Cards bulk dump
+  (~16 MB, one row per Oracle id). `oragle refresh cards` rebuilds it.
 
 Card lookups hit `cards.db` first, so `card` and `ask` work offline
-(`--offline` makes that explicit). Cards printed after your last refresh
-fall back to a live Scryfall lookup and rulings are cached on first fetch.
+(`--offline` makes it explicit). At most one request per 24 h asks
+Scryfall whether the bulk dump was updated; if it's newer than yours,
+commands print a notice suggesting a refresh.
 
-## Keeping the card database fresh
-
-- At most one request per 24h to Scryfall's `/bulk-data` endpoint compares
-  the upstream dump date with yours; if upstream is newer, commands print a
-  notice suggesting `mtg refresh cards`.
-- Network problems during that check are ignored silently — offline use is
-  the point of the local DB. `--offline` skips the check entirely.
-- `mtg refresh cards` does the actual re-download and rebuild (~4s).
-
-## LLM backends
-
-Auto-detected in this order, or force with `--backend`:
-
-- `mistral` — if `MISTRAL_API_KEY` is set (default model
-  `zai-glm-5-3-flash`)
-- `lmstudio` — LM Studio server (Developer tab, `localhost:1234`); uses the
-  first loaded model
-- `ollama` — `localhost:11434/v1`
-
-Model overrides: `--model` or the `MTG_MODEL` environment variable. Timeout:
-`MTG_LLM_TIMEOUT` (seconds).
-
-For standalone (outside Vibe) use, put the key in a `.env` file instead of
-your shell rc — the CLI loads `$MTG_ENV_FILE`, then `./.env`, then
-`~/.local/share/mtg-rules-judge/.env` at startup (the real environment always
-wins; the file is gitignored):
+## Web app
 
 ```sh
-echo 'MISTRAL_API_KEY=<your key from console.mistral.ai>' > .env
-chmod 600 .env
+echo 'WEB_TOKEN=pick-a-long-random-string' >> .env
+oragle serve                        # binds 127.0.0.1:10000
 ```
 
-Note: running inside a Mistral Vibe session needs no setup — Vibe injects its
-own configured key into the environment.
+Feature parity with the CLI: same retrieval, threads (the New-thread
+button is `:new`), `[[Name]]` refs, deck panel, progress notes and
+hint lines. Rule numbers in answers and in the footer are links that
+expand rule text from the local index; card names link to Scryfall;
+mana symbols render with Scryfall's icon set (bundled, offline).
 
-## Tests
+### Hosting it (optional)
 
-```sh
-uv run python -m unittest discover -s tests -v
-```
+The repo's `Dockerfile` and `render.yaml` describe a free-tier Render
+deployment: rules and cards are baked into the image at build time,
+secrets (your API key, `WEB_TOKEN`) are environment variables. Requests
+are jobified (`POST /ask` returns a job id; the browser polls) because
+hosted proxies cut long requests before answers finish. The page
+detects the free-tier wake-up and tells the user. Any host that runs a
+Docker image works the same way.
 
-## Chunking decision
+## Bench
 
-Each rule number (`117.5`, `702.2c`) is its own chunk. A parent rule's chunk
-contains only its own text, never subrules; `mtg rule` and `ask` context
-assembly pull subrules in explicitly when needed. Example paragraphs attach
-to the rule they follow.
+`oragle bench [file]` runs a question file through the ask pipeline and
+writes a markdown report. The repo ships two sets in `dev/`: `bench.txt`
+(common tricky cases) and `bench2.txt` (eleven infamously hard
+interactions). `--only 1,4` re-runs specific questions.
 
 ## Configuration
 
-Settings are plain environment variables; put them in `.env` (the project
-root file is found automatically, from any working directory) to make
-them permanent — that file is the config file. `oragle config` (or `:config`
-in the session) shows every effective value and where it came from:
-
-```sh
-oragle config
-# backend: mistral  [environment]
-# model: zai-glm-5-3-flash
-# fallback model: mistral-small-latest
-# slow switch after: 75s (0 disables)   [/home/you/.local/share/.../.env]
-# llm timeout: 240s
-```
+Settings are plain environment variables; `.env` (auto-found next to the
+checkout, `$MTG_DATA_DIR/.env`, or `$MTG_ENV_FILE`) is the config file,
+and the real environment always wins. `oragle config` / `:config` shows
+every effective value and its origin.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MISTRAL_API_KEY` | — | API key (also works for any OpenAI-compatible backend via `MTG_API_KEY`-style env) |
-| `MTG_MODEL` | backend default | model override (`:model`, `--model`) |
-| `MTG_FALLBACK_MODEL` | `mistral-small-latest` on mistral | model used when the primary is too slow or failing; empty disables |
+| `MTG_API_BASE` | — | any OpenAI-compatible endpoint root, e.g. `https://openrouter.ai/api/v1` |
+| `MTG_API_KEY` | — | bearer key for that endpoint |
+| `MTG_MODEL` | backend default | model name (required for custom endpoints without a listing) |
+| `MTG_BACKEND` | auto | force `openai`/`mistral`/`lmstudio`/`ollama` |
+| `MISTRAL_API_KEY` | — | shortcut: selects api.mistral.ai as the backend |
+| `MTG_FALLBACK_MODEL` | empty | switch to this model when the primary is too slow or failing |
 | `MTG_SLOW_AFTER` | `75` | seconds without answer text before switching (0 disables) |
-| `MTG_LLM_TIMEOUT` | `240` | per-request timeout |
-| `MTG_DATA_DIR` / `MTG_ENV_FILE` | — | data and env file locations |
+| `MTG_LLM_TIMEOUT` | `240` | per-request timeout, seconds |
+| `MTG_DATA_DIR` / `MTG_ENV_FILE` | — | data and env-file locations |
+| `WEB_TOKEN` | — | required by `serve` (bearer token for the web app) |
+| `NO_COLOR` / `FORCE_COLOR` | — | disable / force terminal styling |
 
-In an interactive session, if the watchdog switches to the fallback
-model, the session stays on it (`staying on ... for this session`) — a
-model that needed rescuing once is usually slow for a while — until you
-change it with `:model <name>`.
+## Development
+
+```sh
+uv run --with pytest pytest -q          # test suite
+```
+
+Design decisions, mechanics notes, and the project history live in
+`PLAN.md`; the working conventions are in `AGENTS.md`; development-only
+tools (bench question sets, the accessibility audit) are in `dev/`.
+
+This is an unofficial fan tool. Magic: the Gathering is a trademark of
+Wizards of the Coast; the Comprehensive Rules are published by Wizards
+of the Coast. Card data and symbol art are courtesy of
+[Scryfall](https://scryfall.com) — this project is not affiliated with
+or endorsed by Wizards of the Coast or Scryfall.
+
+The project's own code is licensed under the [MIT License](LICENSE);
+the card data, symbol art, and Comprehensive Rules it downloads are not
+covered by that license.

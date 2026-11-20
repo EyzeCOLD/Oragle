@@ -1,9 +1,15 @@
 """One abstraction over local and hosted LLMs, OpenAI-compatible chat shape.
 
 Backends (all speak POST {base}/chat/completions):
+- openai:   any OpenAI-compatible endpoint; select with MTG_API_BASE
+            (+ MTG_API_KEY, MTG_MODEL). Covers OpenAI, OpenRouter, Z.ai,
+            Groq, Together, Mistral, ... anything speaking the protocol.
 - mistral:  https://api.mistral.ai/v1, needs MISTRAL_API_KEY
 - lmstudio: http://localhost:1234/v1 (LM Studio local server)
 - ollama:   http://localhost:11434/v1
+
+MTG_BACKEND forces one explicitly; otherwise auto-detection prefers
+MTG_API_BASE, then MISTRAL_API_KEY, then local servers.
 """
 
 import json
@@ -27,6 +33,13 @@ class LLMError(RuntimeError):
 MAX_HISTORY_MESSAGES = 6  # last 3 exchanges keep follow-ups affordable
 
 
+def _base_url(backend):
+    """Endpoint root for a backend; the openai backend is user-supplied."""
+    if backend == "openai":
+        return (os.environ.get("MTG_API_BASE") or "").rstrip("/")
+    return BASE_URLS.get(backend, "")
+
+
 def _probe(base):
     try:
         net.get_json(f"{base}/models", timeout=2)
@@ -38,15 +51,21 @@ def _probe(base):
 def resolve_backend(explicit=None):
     if explicit:
         return explicit
+    env_backend = os.environ.get("MTG_BACKEND", "").strip()
+    if env_backend:
+        return env_backend
+    if os.environ.get("MTG_API_BASE"):
+        return "openai"
     if os.environ.get("MISTRAL_API_KEY"):
         return "mistral"
     for backend in ("lmstudio", "ollama"):
         if _probe(BASE_URLS[backend]):
             return backend
     raise LLMError(
-        "No LLM backend available. Set MISTRAL_API_KEY, or start the LM Studio "
-        "server (Developer tab, localhost:1234), or install/run Ollama. "
-        "You can also force one with --backend {mistral,lmstudio,ollama}."
+        "No LLM backend available. Set MTG_API_BASE (any OpenAI-compatible "
+        "endpoint) with MTG_API_KEY, or MISTRAL_API_KEY, or start the LM "
+        "Studio server (localhost:1234) or Ollama. MTG_BACKEND forces one; "
+        "--backend does the same per run."
     )
 
 
@@ -57,15 +76,15 @@ def default_model(backend):
     if backend in DEFAULT_MODELS:
         return DEFAULT_MODELS[backend]
     try:
-        models = net.get_json(f"{BASE_URLS[backend]}/models", timeout=2)
+        models = net.get_json(f"{_base_url(backend)}/models", timeout=2)
         data = models.get("data", [])
         if data:
             return data[0]["id"]
     except (net.NetError, KeyError):
         pass
     raise LLMError(
-        f"No model available for backend '{backend}'. Load a model in LM Studio "
-        "(or set MTG_MODEL)."
+        f"No model available for backend '{backend}'. Load a model in LM "
+        "Studio, or set MTG_MODEL (required for the openai backend)."
     )
 
 
@@ -136,15 +155,19 @@ def chat(backend, model, messages, temperature=0.1, tools=None, progress=None,
         if not key:
             raise LLMError("MISTRAL_API_KEY is not set.")
         headers["Authorization"] = f"Bearer {key}"
+    elif backend == "openai":
+        key = os.environ.get("MTG_API_KEY")
+        if not key:
+            raise LLMError("MTG_API_KEY is not set (used with MTG_API_BASE).")
+        headers["Authorization"] = f"Bearer {key}"
     payload = {"model": model, "messages": messages, "temperature": temperature}
     if backend == "mistral":
-        # Billing router: bare API calls bill to the pay-as-you-go API
-        # bucket, which a Vibe-plan account has no budget for (402
-        # billing_no_api_budget_configured). A non-empty
-        # metadata.call_type is how Mistral's own clients mark a request
-        # to be billed to the subscription's Vibe allowance instead.
-        # Default "main_call"; MTG_MISTRAL_CALL_TYPE="" sends bare calls.
-        call_type = os.environ.get("MTG_MISTRAL_CALL_TYPE", "main_call").strip()
+        # Billing router, mistral-specific: bare API calls bill to the
+        # pay-as-you-go API bucket; a non-empty metadata.call_type marks
+        # a request as plan/Vibe-allowance traffic the way Mistral's own
+        # clients do. Off by default — set MTG_MISTRAL_CALL_TYPE only if
+        # you know your account is billed that way.
+        call_type = os.environ.get("MTG_MISTRAL_CALL_TYPE", "").strip()
         if call_type:
             payload["metadata"] = {"call_type": call_type}
     if tools:
@@ -152,7 +175,7 @@ def chat(backend, model, messages, temperature=0.1, tools=None, progress=None,
         payload["tool_choice"] = "auto"
     if stream is not None:
         payload["stream"] = True
-    url = f"{BASE_URLS[backend]}/chat/completions"
+    url = f"{_base_url(backend)}/chat/completions"
 
     def _run_buffered():
         resp = net.post_json(url, payload, headers=headers,
