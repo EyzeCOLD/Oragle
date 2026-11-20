@@ -270,6 +270,23 @@ ring icy blue (verified via CDP Emulation.setFocusEmulationEnabled
 — plain headless does not apply :focus, worth remembering when
 checking focus styles).
 
+Accessibility audit (2026-11-20): dev/a11y_check.py spins the fake-
+pipeline server, drives headless Chromium + CDP, injects axe-core
+(cached at /tmp/axe.min.js) and reports WCAG violations for both
+themes; focus emulation on. Findings fixed: aria-labels on the three
+form fields (question/decklist/token); roles — threadbar region,
+composer form named, modals are dialogs, main aria-labelled, and
+status is role=status aria-live=polite (screen readers now hear the
+working/done states). Contrast: axe cannot resolve bg through
+gradients/textures (reports "needs review"), so ratios are computed
+manually against the worst-case gradient stop — six pairs were
+under 4.5 and were recolored: wood .sub 3.88 -> 5.01 (#cbb890),
+steel .sub 3.26 -> 4.62 (#e2e8ee), both placeholders 3.3 -> 5.3
+(#9e947c / #8b96a0), steel status/threadbar 4.16 -> 5.18 (#b8c4d2),
+parchment footer/summary 4.08 -> 4.97 (#5a4623). All remaining
+header pairs measure 5.3-6.6. Rerun: `uv run --with websocket-client
+python dev/a11y_check.py`.
+
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO
 exports, "N Card"/"Nx"/"xN" counts, set suffixes, comments, SECTION
