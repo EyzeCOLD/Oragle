@@ -246,7 +246,21 @@ bevel inverts when pressed) and jade gemstone primaries (specular
 highlight + glow). Modals are oaken doors (double inset ring reads
 as brass inlay). Status/threadbar rails: brushed brass. Gold pulsing
 orbs for the working dots. Parchment/background-colors chosen for
-contrast (ink #32220f on cream; #ded0ae on stone).
+contrast (ink #32220f on cream; #ded0ae on stone). Third pass (same
+day, user feedback): jade primaries are now lozenges (border-radius
+999px) and Ask is the oversized centerpiece (14px caps, wide
+padding, stronger glow). Cold-steel variant (body.steel, header
+toggle button, persisted in localStorage oragle_theme): wood/leather
+swap to blued steel — wall becomes riveted steel plate (repeating-
+gradient seams + coarse forge blotches + brushed streaks), header/
+composer are riveted beams, secondary buttons are big BLOCKY metal
+slabs (border-radius 0, hard multi-step chisel bevels with zero
+blur, sharp unblurred 2px 3px drop shadows that collapse on press),
+the user bubble is a corner-riveted steel plate, the rulebox cold
+blued steel with gold engraving, modals are steel vault doors. Jade
+and parchment stay untouched in both themes. The stone viewport
+turbulence seam is visible at tile edges — user verdict: charming,
+left as is.
 
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO

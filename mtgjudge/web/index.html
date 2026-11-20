@@ -34,6 +34,10 @@
     --tex-stain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='170'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.012' numOctaves='4' seed='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.25 0 0 0 0 0.08 0 0 0 0.13 0'/%3E%3C/filter%3E%3Crect width='300' height='170' filter='url(%23p)'/%3E%3C/svg%3E");
     /* the wall behind the whole UI: staggered dark brickwork */
     --tex-brick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='52'%3E%3Crect width='96' height='52' fill='%230c0a07'/%3E%3Crect x='1' y='1' width='45' height='24' fill='%23251e15'/%3E%3Crect x='48' y='1' width='47' height='24' fill='%23211a12'/%3E%3Crect x='-23' y='27' width='45' height='24' fill='%23231c13'/%3E%3Crect x='25' y='27' width='45' height='24' fill='%23261f16'/%3E%3Crect x='73' y='27' width='45' height='24' fill='%23201911'/%3E%3C/svg%3E");
+    /* cold variant: fine horizontal brush streaks over blued steel */
+    --tex-steel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.45' numOctaves='2' seed='6'/%3E%3CfeColorMatrix values='0 0 0 0 0.72 0 0 0 0 0.79 0 0 0 0 0.88 0 0 0 0.2 0'/%3E%3C/filter%3E%3Crect width='120' height='60' filter='url(%23t)'/%3E%3C/svg%3E");
+    /* cold variant: coarse forge blotches, cool gray */
+    --tex-steel-coarse: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.038' numOctaves='4' seed='13'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.49 0 0 0 0 0.58 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23c)'/%3E%3C/svg%3E");
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
@@ -117,7 +121,7 @@
         rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 45%),
       linear-gradient(170deg, #63dfaa 0%, #23a374 45%, #0c6e52 80%, #085741);
     border: 1px solid #03392a;
-    border-radius: 5px;
+    border-radius: 999px;
     box-shadow: inset 0 2px 3px rgba(255, 255, 255, .4),
                 inset 0 -5px 9px rgba(0, 25, 15, .6),
                 0 2px 6px rgba(0, 0, 0, .65),
@@ -152,6 +156,22 @@
                 inset 0 -5px 9px rgba(0, 25, 15, .6), 0 2px 6px rgba(0, 0, 0, .65);
   }
   #threadbar button { padding: 3px 10px; font-size: 11.5px; }
+  /* the Ask button is the centerpiece: a fat glowing jade lozenge */
+  #send {
+    padding: 13px 26px;
+    font-size: 14px;
+    letter-spacing: 1.5px;
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .4),
+                inset 0 -6px 11px rgba(0, 25, 15, .6),
+                0 3px 8px rgba(0, 0, 0, .7),
+                0 0 18px rgba(70, 225, 165, .3);
+  }
+  #send:hover {
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .5),
+                inset 0 -6px 11px rgba(0, 25, 15, .6),
+                0 3px 8px rgba(0, 0, 0, .7),
+                0 0 26px rgba(90, 255, 190, .55);
+  }
   #deckbtn.has-deck {
     color: #b8f2d6;
     box-shadow: inset 0 1px 0 rgba(255, 230, 160, .38),
@@ -447,6 +467,129 @@
   #status.waking { color: var(--hint); }
   #status.error { color: var(--err); }
 
+  /* =====================================================================
+   * COLD STEEL VARIANT (body.steel, toggled by the header button).
+   * Wood and leather become blued steel with aggressive, unblurred
+   * chisel bevels and SHARP drop shadows; jade and parchment stay.
+   * ===================================================================== */
+  body.steel {
+    background:
+      var(--noise),
+      repeating-linear-gradient(0deg, transparent 0 199px, rgba(0, 0, 0, .55) 199px 201px),
+      repeating-linear-gradient(90deg, transparent 0 199px, rgba(0, 0, 0, .55) 199px 201px),
+      radial-gradient(150% 90% at 50% 0, rgba(150, 190, 230, .07), transparent 60%),
+      var(--tex-steel-coarse), #0b0d10;
+    background-size: 140px, auto, auto, auto, 160px, auto;
+  }
+  /* riveted steel beams */
+  body.steel header, body.steel form {
+    background: var(--noise), var(--tex-steel), var(--tex-steel-coarse),
+                linear-gradient(180deg, #414a54, #262d34 70%, #181d22);
+    border-bottom-color: #000;
+    box-shadow: inset 0 1px 0 #95a5b5,
+                inset 0 2px 1px rgba(150, 175, 200, .35),
+                inset 0 -2px 1px #05070a,
+                0 3px 0 rgba(0, 0, 0, .8),
+                0 4px 6px rgba(0, 0, 0, .5);
+  }
+  body.steel header { border-bottom: 1px solid #000; }
+  body.steel header h1 {
+    color: #d7e4ef;
+    text-shadow: 0 -1px 0 #66788a, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9),
+                 0 0 16px rgba(160, 200, 240, .25);
+  }
+  body.steel header .sub { color: #8797a8; }
+  /* blocky metal buttons: flat faces, hard multi-step chisels, zero blur */
+  body.steel header button, body.steel #deckbtn,
+  body.steel #deckpanel .row button.cancel {
+    border-radius: 0;
+    background: var(--noise), var(--tex-steel),
+                linear-gradient(180deg, #4b545e, #343c45 55%, #22282f);
+    color: #e3ecf6;
+    box-shadow: inset 1px 0 0 #7c8d9d,
+                inset -1px 0 0 #0d1115,
+                inset 0 1px 0 #b9c8d6,
+                inset 0 -1px 0 #05070a,
+                2px 3px 0 rgba(0, 0, 0, .75);
+    text-shadow: 0 1px 1px #000, 0 -1px 0 rgba(150, 175, 200, .28);
+  }
+  body.steel header button:hover, body.steel #deckbtn:hover,
+  body.steel #deckpanel .row button.cancel:hover {
+    color: #ffffff;
+    background: var(--noise), var(--tex-steel),
+                linear-gradient(180deg, #57626e, #3c454f 55%, #262d35);
+    box-shadow: inset 1px 0 0 #8fa2b4,
+                inset -1px 0 0 #0d1115,
+                inset 0 1px 0 #cdd9e4,
+                inset 0 -1px 0 #05070a,
+                2px 3px 0 rgba(0, 0, 0, .75),
+                0 0 10px rgba(160, 200, 240, .25);
+  }
+  body.steel header button:active, body.steel #deckbtn:active,
+  body.steel #deckpanel .row button.cancel:active {
+    background: linear-gradient(180deg, #1c2127, #2b323a);
+    /* pressed: the chisel flips and the hard drop shadow collapses */
+    box-shadow: inset 1px 0 0 #0d1115,
+                inset -1px 0 0 #7c8d9d,
+                inset 0 1px 0 #05070a,
+                inset 0 -1px 0 #b9c8d6,
+                inset 0 2px 4px rgba(0, 0, 0, .7),
+                1px 1px 0 rgba(0, 0, 0, .75);
+    transform: translateY(1px);
+  }
+  /* brass rails become brushed steel rails */
+  body.steel #threadbar, body.steel #status {
+    background: var(--noise), var(--tex-steel),
+                linear-gradient(180deg, #3b434c, #1b2026);
+    color: #9fb0c2;
+    box-shadow: inset 0 1px 0 #8fa2b4,
+                inset 0 -2px 1px #05070a,
+                0 2px 0 rgba(0, 0, 0, .7);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .8);
+  }
+  /* user bubble: riveted steel plate, sharp edges */
+  body.steel .user {
+    background:
+      radial-gradient(circle at 10px 10px, #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) no-repeat,
+      radial-gradient(circle at calc(100% - 10px) 10px, #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) 100% 0 no-repeat,
+      radial-gradient(circle at 10px calc(100% - 10px), #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) 0 100% no-repeat,
+      radial-gradient(circle at calc(100% - 10px) calc(100% - 10px), #d7e2ec 0 2px, #5b6b7a 3px, #101418 3.5px, transparent 4px) 100% 100% no-repeat,
+      var(--noise), var(--tex-steel),
+      linear-gradient(170deg, #434c56, #272e35 65%, #1d2228);
+    border: 1px solid #000;
+    border-top: 1px solid #6d7d8d;
+    border-radius: 3px 10px 2px 12px;
+    box-shadow: inset 0 1px 0 rgba(190, 210, 230, .3),
+                inset 0 -2px 0 #05070a,
+                inset 2px 2px 3px rgba(0, 0, 0, .55),
+                2px 3px 0 rgba(0, 0, 0, .6);
+    color: #e6eef6;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .8);
+  }
+  /* rulebox slab: cold blued steel, gold engraving stays */
+  body.steel .rulebox {
+    background: var(--noise), var(--tex-steel-coarse), #1d2227;
+    color: #ccd6e0;
+    box-shadow: inset 1px 0 0 #38424c,
+                inset -1px 0 0 #05070a,
+                inset 0 1px 0 #4a5661,
+                inset 3px 3px 6px rgba(0, 0, 0, .7),
+                inset -1px -1px 0 rgba(160, 190, 220, .06);
+  }
+  /* modals: steel vault doors */
+  body.steel #gate .inner, body.steel #deckpanel .inner {
+    background: var(--noise), var(--tex-steel), var(--tex-steel-coarse),
+                linear-gradient(180deg, #3b434c, #1a1f25);
+    box-shadow: inset 0 0 0 3px #10141a, inset 0 0 0 4px #9aa9ba,
+                inset 0 3px 10px rgba(0, 0, 0, .8),
+                0 14px 50px rgba(0, 0, 0, .85), 0 0 80px rgba(0, 0, 0, .6);
+  }
+  body.steel #gate h2, body.steel #deckpanel h2 {
+    color: #d7e4ef;
+    text-shadow: 0 -1px 0 #66788a, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9);
+  }
+  body.steel #gate p, body.steel #deckpanel p { color: #9fb0c2; }
+  body.steel ::selection { background: #2b4a52; }
   /* ---- working indicator: gold orbs -------------------------------------- */
   .dots { display: inline-flex; gap: 4px; margin-left: 8px;
           vertical-align: middle; }
@@ -476,6 +619,7 @@
 <header>
   <h1>oragle</h1>
   <span class="sub" id="crdate">MTG rules judge</span>
+  <button id="themebtn" type="button">Steel</button>
   <button id="newthread" type="button">New thread</button>
 </header>
 <main id="chat"></main>
@@ -863,6 +1007,18 @@ $("newthread").addEventListener("click", () => {
   note("— new thread started (fresh context) —");
 });
 
+// ---- theme toggle: wood & leather or cold steel ---------------------
+let theme = localStorage.getItem("oragle_theme") || "wood";
+function applyTheme() {
+  document.body.classList.toggle("steel", theme === "steel");
+  $("themebtn").textContent = theme === "steel" ? "Wood" : "Steel";
+}
+$("themebtn").addEventListener("click", () => {
+  theme = theme === "steel" ? "wood" : "steel";
+  localStorage.setItem("oragle_theme", theme);
+  applyTheme();
+});
+
 $("barnew").addEventListener("click", () => $("newthread").click());
 
 (async () => {
@@ -870,6 +1026,7 @@ $("barnew").addEventListener("click", () => $("newthread").click());
     $("gate").classList.add("hidden");
   }
   restoreNotes();
+  applyTheme();
   syncNewThreadButton();  // stale thread id in localStorage? show the exit
   await connect();
 })();
