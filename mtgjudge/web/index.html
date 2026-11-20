@@ -657,6 +657,10 @@
     display: inline-block;
     margin-left: 8px; vertical-align: -4px;
   }
+  /* the display rule above out-specifies the UA sheet's [hidden]
+     { display: none }, so hiding must be explicit for the persistent
+     rail copy */
+  .hourglass[hidden] { display: none; }
   .hourglass svg { display: block; width: 17px; height: 20.5px; }
   .hourglass svg,
   .hourglass .hg-topsand,

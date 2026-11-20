@@ -602,6 +602,15 @@ rulebox click handler works there too (fetches /rule, expands inline).
 Ids failing the ^[\d]+(\.[\d]+)*[a-z]{0,2}$ guard stay plain text (a
 malformed "weird id/x" stays inert rather than becoming a link).
 
+Hotfix (2026-11-20, user: hourglass "spinning on the statusline even
+when connected"): .hourglass { display: inline-block } out-specifies
+the UA sheet's [hidden] { display: none }, so the persistent rail copy
+stayed visible (and animating) in every idle state despite its hidden
+attribute being set. Fixed with an explicit .hourglass[hidden] rule.
+Lesson recorded: verify hidden/collapsed UI by computed display, not
+by the attribute — the earlier headless check read the property and
+passed a visible bug.
+
 ## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
 
 Direct api.mistral.ai calls with a console key started returning HTTP
