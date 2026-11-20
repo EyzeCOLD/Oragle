@@ -311,6 +311,18 @@ hg-flip rotation, and a sand layer (baked stream + curved pile) that
 stays gravity-fixed outside the rotation and glints via the hg-glint
 keyframe (brightness + opacity). The old ::before sand trick and
 hg-stream keyframes are gone. Reduced-motion still freezes it.
+2026-11-20 follow-up (user: "bubble hourglass and status bar hourglass
+look different; the bar one looks nice, but it could run faster"): the
+two instances share identical CSS — the contrast context differs. The
+status rail is dark brass where the bright gold artwork glows; the
+answer bubble is light parchment/ledger where the same pale sand is
+near-invisible. The bubble now gets the same drawing in darkened tints
+(.answer .hourglass variants, dark bronze+amber on wood, dark slate on
+steel; glass tinted dark like real glass against a light sky), while
+the status rail keeps the bright gold/pewter. Flip cycle sped up from
+2.6s to 1.7s everywhere. Headless-verified in both themes: both visible
+mid-run, durations 1.7s, artwork differs per context, bright variants
+kept on the rail. Screenshots: /tmp/oracle_hg3_*.png.
 Card symbols in the web frontend (2026-11-20, symbol-rendering branch):
 {2}{U/R}{U} in answers and expanded rulebox text now render as
 inline Scryfall SVG icons, 1.02em, both themes. Frontend renderSymbols()

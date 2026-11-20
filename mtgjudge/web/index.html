@@ -657,18 +657,34 @@
   .hourglass .frame {
     position: absolute; inset: 0;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%238a611d'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%238a611d'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%236b4a14'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%236b4a14'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%23f2cf7c' fill-opacity='.24' stroke='%23f2cf7c' stroke-opacity='.55' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%23f2cf7c' fill-opacity='.24' stroke='%23f2cf7c' stroke-opacity='.55' stroke-width='.8'/%3E%3C/svg%3E") center/100% 100% no-repeat;
-    animation: hg-flip 2.6s infinite;
+    animation: hg-flip 1.7s infinite;
   }
   .hourglass .sand {
     position: absolute; inset: 0;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%23f2cf7c' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%23f2cf7c'/%3E%3C/svg%3E") center/100% 100% no-repeat;
-    animation: hg-glint 2.6s infinite;
+    animation: hg-glint 1.7s infinite;
   }
   body.steel .hourglass .frame {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%2377879a'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%2377879a'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%234d5a68'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%234d5a68'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%23d7e4ef' fill-opacity='.2' stroke='%23d7e4ef' stroke-opacity='.55' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%23d7e4ef' fill-opacity='.2' stroke='%23d7e4ef' stroke-opacity='.55' stroke-width='.8'/%3E%3C/svg%3E");
   }
   body.steel .hourglass .sand {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%23d7e4ef' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%23d7e4ef'/%3E%3C/svg%3E");
+  }
+  /* The answer bubble is light parchment/ledger paper: the same bright
+     gold/pewter artwork that glows on the dark status rail washes out
+     there, so .answer gets the same drawing in darkened tints (glass
+     seen against a light sky shows as dark; sand likewise). */
+  .answer .hourglass .frame {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%235d4210'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%235d4210'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%233f2c08'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%233f2c08'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%238b6a1f' fill-opacity='.12' stroke='%236b4e12' stroke-opacity='.6' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%238b6a1f' fill-opacity='.12' stroke='%236b4e12' stroke-opacity='.6' stroke-width='.8'/%3E%3C/svg%3E");
+  }
+  .answer .hourglass .sand {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%237d5c15' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%237d5c15'/%3E%3C/svg%3E");
+  }
+  body.steel .answer .hourglass .frame {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%234d5a68'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%234d5a68'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%23333e49'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%23333e49'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%2348545f' fill-opacity='.12' stroke='%2355636f' stroke-opacity='.6' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%2348545f' fill-opacity='.12' stroke='%2355636f' stroke-opacity='.6' stroke-width='.8'/%3E%3C/svg%3E");
+  }
+  body.steel .answer .hourglass .sand {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%2346525d' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%2346525d'/%3E%3C/svg%3E");
   }
   @keyframes hg-flip {
     0%, 46%   { transform: rotate(0deg); }
