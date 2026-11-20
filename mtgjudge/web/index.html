@@ -1030,13 +1030,16 @@ async function ask(question) {
         const text = snap.answer || (snap.lines || []).join("\n") || "(empty)";
         answerBox.innerHTML = renderAnswer(text, snap.cards || []);
         const secs = snap.elapsed ? Math.round(snap.elapsed) : null;
+        const ctxLinks = (snap.context_ids || []).map(
+            id => (/^[\d]+(\.[\d]+)*[a-z]{0,2}$/.test(id)
+                ? '<a class="rule" data-rule="' + id + '">' + id + "</a>"
+                : id)).join(", ");
         answerBox.insertAdjacentHTML("beforeend",
             '<div class="footer">— ' + (snap.model || "model") +
             " · CR effective " + (snap.effective_date || "?") +
             (secs ? " · " + secs + "s" : "") +
-            (snap.context_ids && snap.context_ids.length
-                ? " · context: " + snap.context_ids.join(", ")
-                : "") + "</div>");
+            (ctxLinks ? " · context: " + ctxLinks : "") +
+            "</div>");
         if (events.length) {
           answerBox.insertAdjacentHTML("beforeend",
               '<details><summary>retrieval log</summary><pre>' +

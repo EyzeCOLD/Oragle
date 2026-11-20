@@ -595,6 +595,13 @@ bench2-last.md.
 
 ---
 
+Bubble footer rule citations are links (2026-11-20, same branch): the
+"context: ..." ids in the answer footer render as the same
+a.rule[data-rule] elements the answer body uses, so the delegated
+rulebox click handler works there too (fetches /rule, expands inline).
+Ids failing the ^[\d]+(\.[\d]+)*[a-z]{0,2}$ guard stay plain text (a
+malformed "weird id/x" stays inert rather than becoming a link).
+
 ## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
 
 Direct api.mistral.ai calls with a console key started returning HTTP
