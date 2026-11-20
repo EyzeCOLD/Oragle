@@ -574,6 +574,50 @@ bench2-last.md.
 
 ---
 
+## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
+
+Direct api.mistral.ai calls with a console key started returning HTTP
+402 billing_no_api_budget_configured. Diagnosis with minimal curl
+probes: keys are valid (models list 200), but ANY completion 402s —
+newly created keys too. Mistral restructured billing Sept–Nov 2026
+(Pro's included API credit cut $30 to $25.50, then the separate
+API/Studio usage metrics merged; Studio is their rebranded developer
+console, and "Studio keys" are just PAYG API keys — where a key is
+CREATED doesn't matter). Current published model: a subscription
+covers the Vibe app and Vibe Code; "for an app, use a pay-as-you-go
+key" — the API bucket a plan account draws on for bare calls no
+longer exists for this account (support ticket open; may restore it).
+
+What actually routes billing (verified empirically 2026-11-20, same
+key, same model): a bare request 402s; a request whose body carries
+metadata.call_type="main_call" returns 200. Mistral's own clients mark
+requests this way, and the marker routes them to the subscription's
+Vibe allowance (255e/mo) instead of the (absent) PAYG bucket. There
+is no client fingerprinting — User-Agent is ignored.
+
+Implemented in llm.chat(): every mistral-backend payload now carries
+metadata.call_type; the value comes from MTG_MISTRAL_CALL_TYPE
+(default "main_call", empty string = bare API billing again). Shown in
+`oragle config` as "mistral billing marker". Unit-tested (default,
+override, disable, non-mistral backends never send it); verified live
+end to end (ask answered in 15s, billed to the plan).
+
+Honest caveat recorded up front: this presents our requests in the
+format Mistral uses to recognize Vibe traffic. It is the user's own
+subscription and their low-volume use, but it is not a documented
+third-party integration — if support's ticket answer restores PAYG
+credits or blesses another route, prefer that over the marker.
+
+Provider direction (decided 2026-11-20, marker is the interim): next
+provider of choice is Z.ai direct PAYG (GLM-5.3-Flash is the model
+already validated 11/11 on bench2; "$0.15 in / $0.50 out per 1M" ~
+one cent per question; older GLM-4.x-Flash models are genuinely
+free — a natural fallback tier). OpenRouter as the experimentation
+harness if model choice stays open. Not suitable: subscriptions of
+any kind for this single-user bursty workload, and Z.ai's Coding
+Plan specifically (terms-restricted to coding tools — the same gray
+zone as the marker).
+
 ## Known risks / things that will bite
 
 - **Layer interactions (rule 613) and the stack** are where a naive pipeline

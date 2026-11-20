@@ -221,5 +221,50 @@ class SearchTest(unittest.TestCase):
         self.assertNotIn("...", brief.splitlines()[1])
 
 
+class MistralCallTypeTest(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+
+    def _fake_post(self):
+        def fake_post(url, payload, headers=None, timeout=0):
+            self.calls.append(payload)
+            return text_response("ok")
+        return fake_post
+
+    def test_call_type_marker_sent_by_default(self):
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._fake_post()), \
+             mock.patch.dict(os.environ, {"MISTRAL_API_KEY": "k"}):
+            llm.chat("mistral", "m", [{"role": "user", "content": "q"}])
+        self.assertEqual(self.calls[0]["metadata"],
+                         {"call_type": "main_call"})
+
+    def test_call_type_marker_respects_env_override(self):
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._fake_post()), \
+             mock.patch.dict(os.environ,
+                             {"MISTRAL_API_KEY": "k",
+                              "MTG_MISTRAL_CALL_TYPE": "sub_call"}):
+            llm.chat("mistral", "m", [{"role": "user", "content": "q"}])
+        self.assertEqual(self.calls[0]["metadata"],
+                         {"call_type": "sub_call"})
+
+    def test_call_type_marker_disabled_with_empty_value(self):
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._fake_post()), \
+             mock.patch.dict(os.environ,
+                             {"MISTRAL_API_KEY": "k",
+                              "MTG_MISTRAL_CALL_TYPE": ""}):
+            llm.chat("mistral", "m", [{"role": "user", "content": "q"}])
+        self.assertNotIn("metadata", self.calls[0])
+
+    def test_other_backends_never_send_marker(self):
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._fake_post()), \
+             mock.patch.dict(os.environ, {"MTG_MISTRAL_CALL_TYPE": "x"}):
+            llm.chat("lmstudio", "m", [{"role": "user", "content": "q"}])
+        self.assertNotIn("metadata", self.calls[0])
+
+
 if __name__ == "__main__":
     unittest.main()

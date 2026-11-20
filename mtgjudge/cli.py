@@ -446,7 +446,7 @@ def settings_report(backend=None, model=None):
     backend = backend or llm.resolve_backend()
     model = model or os.environ.get("MTG_MODEL") or llm.default_model(backend)
     slow_after, fallback_model = _watchdog_settings(backend)
-    return [
+    rows = [
         ("backend", backend, envfile.origin("MISTRAL_API_KEY")
          if backend == "mistral" else None),
         ("model", model, envfile.origin("MTG_MODEL")),
@@ -458,6 +458,15 @@ def settings_report(backend=None, model=None):
          envfile.origin("MTG_LLM_TIMEOUT")),
         ("command", "oragle config   (REPL: :config)", None),
     ]
+    if backend == "mistral":
+        # Vibe-plan billing router marker; see llm.chat()
+        call_type = os.environ.get("MTG_MISTRAL_CALL_TYPE",
+                                   "main_call").strip()
+        rows.insert(-1, (
+            "mistral billing marker",
+            f"call_type={call_type}" if call_type else "(bare API billing)",
+            envfile.origin("MTG_MISTRAL_CALL_TYPE")))
+    return rows
 
 
 def cmd_config(args):
