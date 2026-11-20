@@ -646,57 +646,60 @@
   .msym { display: inline-block; width: 1.02em; height: 1.02em;
           vertical-align: -0.16em; margin: 0 .04em; }
   .msym img { display: block; width: 100%; height: 100%; }
-  /* working indicator: a flipping hourglass. The glass frame rotates
-     end-over-end; the sand pile is gravity-fixed (outside the rotating
-     element) so it always sits in the visual bottom bulb. */
+  /* working indicator: hourglass modeled on "SVG Hourglass CSS Only
+     Animation" by Marius Petrescu (codepen.io/mashul/pen/rPaqYE): the
+     sand drains into a rising pile, then the whole glass turns over.
+     The snap back to upright at cycle start is invisible because a
+     full pile looks the same either way up. One markup for the status
+     rail and the answer bubble; the rail copy is a persistent element
+     so its cycle never restarts mid-poll. */
   .hourglass {
-    display: inline-block; position: relative;
-    width: 16px; height: 24px;
-    margin-left: 8px; vertical-align: -5px;
+    display: inline-block;
+    margin-left: 8px; vertical-align: -4px;
   }
-  .hourglass .frame {
-    position: absolute; inset: 0;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%238a611d'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%238a611d'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%236b4a14'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%236b4a14'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%23f2cf7c' fill-opacity='.24' stroke='%23f2cf7c' stroke-opacity='.55' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%23f2cf7c' fill-opacity='.24' stroke='%23f2cf7c' stroke-opacity='.55' stroke-width='.8'/%3E%3C/svg%3E") center/100% 100% no-repeat;
-    animation: hg-flip 1.7s infinite;
+  .hourglass svg { display: block; width: 17px; height: 20.5px; }
+  .hourglass svg,
+  .hourglass .hg-topsand,
+  .hourglass .hg-bottomsand {
+    animation-duration: 3.4s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
   }
-  .hourglass .sand {
-    position: absolute; inset: 0;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%23f2cf7c' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%23f2cf7c'/%3E%3C/svg%3E") center/100% 100% no-repeat;
-    animation: hg-glint 1.7s infinite;
+  .hourglass svg { animation-name: hg-turn; }
+  .hourglass .hg-topsand { animation-name: hg-drain; }
+  .hourglass .hg-bottomsand { animation-name: hg-rise; }
+  .hourglass .hg-topsand,
+  .hourglass .hg-bottomsand {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
   }
-  body.steel .hourglass .frame {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%2377879a'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%2377879a'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%234d5a68'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%234d5a68'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%23d7e4ef' fill-opacity='.2' stroke='%23d7e4ef' stroke-opacity='.55' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%23d7e4ef' fill-opacity='.2' stroke='%23d7e4ef' stroke-opacity='.55' stroke-width='.8'/%3E%3C/svg%3E");
+  .hourglass .hg-glass {
+    fill: #ecf1f6; fill-opacity: .35;
+    stroke: #8a611d; stroke-opacity: .75; stroke-width: 2;
   }
-  body.steel .hourglass .sand {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%23d7e4ef' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%23d7e4ef'/%3E%3C/svg%3E");
+  .hourglass .hg-plate { fill: #8a611d; }
+  .hourglass .hg-topsand, .hourglass .hg-bottomsand { fill: #f5a623; }
+  body.steel .hourglass .hg-glass {
+    fill: #dfe9f2; fill-opacity: .3;
+    stroke: #4d5a68; stroke-opacity: .8;
   }
-  /* The answer bubble is light parchment/ledger paper: the same bright
-     gold/pewter artwork that glows on the dark status rail washes out
-     there, so .answer gets the same drawing in darkened tints (glass
-     seen against a light sky shows as dark; sand likewise). */
-  .answer .hourglass .frame {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%235d4210'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%235d4210'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%233f2c08'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%233f2c08'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%238b6a1f' fill-opacity='.12' stroke='%236b4e12' stroke-opacity='.6' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%238b6a1f' fill-opacity='.12' stroke='%236b4e12' stroke-opacity='.6' stroke-width='.8'/%3E%3C/svg%3E");
+  body.steel .hourglass .hg-plate { fill: #4d5a68; }
+  @keyframes hg-drain {
+    0%        { transform: scaleY(1); }
+    44%, 100% { transform: scaleY(.04); }
   }
-  .answer .hourglass .sand {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%237d5c15' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%237d5c15'/%3E%3C/svg%3E");
+  @keyframes hg-rise {
+    0%        { transform: scaleY(.04); }
+    44%, 100% { transform: scaleY(1); }
   }
-  body.steel .answer .hourglass .frame {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='3.6' y='0.6' width='16.8' height='3.4' rx='1.4' fill='%234d5a68'/%3E%3Crect x='3.6' y='32' width='16.8' height='3.4' rx='1.4' fill='%234d5a68'/%3E%3Crect x='4.4' y='3' width='1.7' height='30' rx='.85' fill='%23333e49'/%3E%3Crect x='17.9' y='3' width='1.7' height='30' rx='.85' fill='%23333e49'/%3E%3Cpath d='M6.6 4 C6.6 8.6 10.4 10.8 11.3 16.4 L12.7 16.4 C13.6 10.8 17.4 8.6 17.4 4 Z' fill='%2348545f' fill-opacity='.12' stroke='%2355636f' stroke-opacity='.6' stroke-width='.8'/%3E%3Cpath d='M6.6 32 C6.6 27.4 10.4 25.2 11.3 19.6 L12.7 19.6 C13.6 25.2 17.4 27.4 17.4 32 Z' fill='%2348545f' fill-opacity='.12' stroke='%2355636f' stroke-opacity='.6' stroke-width='.8'/%3E%3C/svg%3E");
+  @keyframes hg-turn {
+    0%, 44%   { transform: rotate(0deg); }
+    56%, 100% { transform: rotate(180deg); }
   }
-  body.steel .answer .hourglass .sand {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 36'%3E%3Crect x='11.6' y='19.8' width='.85' height='6.2' fill='%2346525d' opacity='.85'/%3E%3Cpath d='M8.3 31.2 C9.3 28.2 10.9 26.7 12 26.2 C13.1 26.7 14.7 28.2 15.7 31.2 Z' fill='%2346525d'/%3E%3C/svg%3E");
-  }
-  @keyframes hg-flip {
-    0%, 46%   { transform: rotate(0deg); }
-    54%, 96%  { transform: rotate(180deg); }
-    100%      { transform: rotate(360deg); }
-  }
-  @keyframes hg-glint {
-    0%, 100% { filter: brightness(1) opacity(1); }
-    50%      { filter: brightness(1.4) opacity(.9); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .hourglass .frame, .hourglass .sand {
+    .hourglass svg, .hourglass .hg-topsand,
+    .hourglass .hg-bottomsand {
       animation: none;
     }
     header button:active, #deckbtn:active,
@@ -742,7 +745,8 @@
     </div>
   </div>
 </div>
-<div id="status" role="status" aria-live="polite"></div>
+<template id="hg-tpl"><svg viewBox="0 0 73 88" aria-hidden="true" focusable="false"><path class="hg-glass" d="M63.8761664,86 C63.9491436,84.74063 64,83.4707791 64,82.1818182 C64,65.2090455 57.5148507,50.6237818 48.20041,44 C57.5148507,37.3762182 64,22.7909545 64,5.81818182 C64,4.52922091 63.9491436,3.25937 63.8761664,2 L10.1238336,2 C10.0508564,3.25937 10,4.52922091 10,5.81818182 C10,22.7909545 16.4851493,37.3762182 25.79959,44 C16.4851493,50.6237818 10,65.2090455 10,82.1818182 C10,83.4707791 10.0508564,84.74063 10.1238336,86 Z"></path><rect class="hg-plate" x="0" y="0" width="74" height="8" rx="2"></rect><rect class="hg-plate" x="0" y="80" width="74" height="8" rx="2"></rect><g transform="translate(18,21)"><path class="hg-topsand" d="M38,0 C36.218769,7.51704545 24.818769,21 19,21 C13.418769,21 1.9,7.63636364 0,0 L38,0 Z"></path></g><g transform="translate(18,55)"><path class="hg-bottomsand" d="M0,21 L38,21 C36.1,13.3636364 24.581231,0 19,0 C13.181231,0 1.781231,13.4829545 0,21 Z"></path></g></svg></template>
+<div id="status" role="status" aria-live="polite"><span id="statustext"></span><span class="hourglass" id="statushg" role="img" aria-label="working" hidden></span></div>
 
 <div id="gate" role="dialog" aria-label="oracle access">
   <div class="inner">
@@ -768,13 +772,13 @@ let threadId = null;
 let token = localStorage.getItem("oragle_token") || "";
 let running = false;
 
+const HG_HTML = document.getElementById("hg-tpl").innerHTML;
+$("statushg").innerHTML = HG_HTML;
+
 function setStatus(text, cls, dots) {
-  status.textContent = text;
+  $("statustext").textContent = text;
   status.className = cls || "";
-  if (dots) {
-    status.insertAdjacentHTML("beforeend",
-        ' ' + '<span class="hourglass" role="img" aria-label="working"><i class="frame"></i><i class="sand"></i></span>');
-  }
+  $("statushg").hidden = !dots;
 }
 
 function authHeaders() {
@@ -970,7 +974,8 @@ async function ask(question) {
     note("decklist attached: " + deckLines + " lines");
   }
   const answerBox = addBubble(
-      "answer", '<span class="hourglass" role="img" aria-label="working"><i class="frame"></i><i class="sand"></i></span>');
+      "answer", '<span class="hourglass" role="img" aria-label="working">'
+      + HG_HTML + "</span>");
   let lastEvent = null;
   try {
     const t0 = Date.now();
