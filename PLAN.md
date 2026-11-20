@@ -303,6 +303,21 @@ sand pile (gold/silver) glints and a stream falls through the neck —
 the sand element sits OUTSIDE the rotating element so the pile always
 stays in the visual bottom bulb through the flip.
 prefers-reduced-motion freezes it to a static hourglass.
+Context bleed fix (2026-11-20, user-reported: "new session said hello,
+asked about the old topic"): two causes. The web client persisted the
+thread id in localStorage and restored it on every page load, and the
+server never evicted conversation threads — so a fresh browser session
+silently resumed the entire old conversation (history + carried
+blocks). Both fixed per the project principle that continuing a
+conversation must be deliberate: thread ids are now per page session
+only (never written to localStorage; the removeItem in the New-thread
+handler stays as legacy cleanup), and Hub._prune_locked evicts threads
+idle > THREAD_TTL_SECONDS (2h; an expired client id just starts a
+fresh thread via thread_or_new, which already handled unknown ids).
+Trade-off accepted deliberately: a mid-conversation page refresh now
+starts a new thread too. On the Render deploy this changes little —
+the server sleeps every 15 min anyway.
+
 
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO

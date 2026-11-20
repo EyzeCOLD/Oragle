@@ -752,7 +752,10 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const status = $("status"), chat = $("chat");
-let threadId = localStorage.getItem("oragle_thread") || null;
+// Threads are per page session, deliberately NOT persisted: a new
+// browser session resuming an old conversation is context bleed the
+// user explicitly does not want. The first question starts a thread.
+let threadId = null;
 let token = localStorage.getItem("oragle_token") || "";
 let running = false;
 
@@ -878,11 +881,11 @@ function showThreadbar(show) {
   $("composer").classList.toggle("attached", show);
 }
 
-// The header button is the context-free escape hatch for the windows the
-// threadbar doesn't cover: a persisted thread id restored on page load,
-// and changing your mind mid-answer once you now know better. It shows
-// only when there is an active thread to leave; a fresh page with no
-// thread stays minimal.
+// The header button is the context-free escape hatch for the windows
+// the threadbar doesn't cover: changing your mind mid-conversation,
+// or asking a genuinely unrelated follow-up once you know better. It
+// shows only when there is an active thread to leave; a fresh page
+// never has one.
 function syncNewThreadButton() {
   $("newthread").classList.toggle("hidden", !threadId);
 }
@@ -942,7 +945,6 @@ async function ask(question) {
     }
     if (r.body.thread !== threadId && r.body.thread) {
       threadId = r.body.thread;
-      localStorage.setItem("oragle_thread", threadId);
       syncNewThreadButton();
     }
     while (true) {
