@@ -270,6 +270,14 @@
                 inset 0 -2px 3px rgba(0, 0, 0, .5);
     opacity: .92;
   }
+  .answer .mdh {  /* markdown heading line, sans the raw # marks */
+    display: block;
+    font-weight: 700;
+    margin: .6em 0 .15em;
+    font-size: 1.04em;
+    letter-spacing: .3px;
+  }
+  .answer .mdh:first-child { margin-top: 0; }
   .answer.error {
     background: var(--noise),
                 linear-gradient(170deg, #45221a, #2b120c);
@@ -855,6 +863,12 @@ function renderAnswer(text, cardNames) {
   // lookarounds reject positions adjacent to > and <.
   let html = text
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // markdown headings (#..######) become styled block lines; the model
+  // emits them and they used to print raw (CLI already handles them)
+  html = html.replace(/^#{1,6}[ \t]+.*$/gm, m => {
+    const title = m.replace(/^#{1,6}[ \t]+/, "").replace(/#+$/, "").trim();
+    return '<span class="mdh">' + title + "</span>";
+  });
   // bold: content may itself contain single asterisks (nested italic);
   // the old [^*\n]+ capture failed on exactly that and printed raw
   // **...** (user-reported twice)

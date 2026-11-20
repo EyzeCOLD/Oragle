@@ -739,6 +739,16 @@ The design is BYO-endpoint: the project never depended on Mistral
 specifics beyond the named-backend convenience, and detection is now
 generic-first.
 
+renderAnswer headings (2026-11-20, user: "raw pound signs in the
+output"): the web renderer had no markdown-heading pass (the CLI's
+ansi.render already strips/bolds them), so model "## heading" lines
+printed raw. renderAnswer now rewrites ^#{1,6} lines to .mdh block
+spans (title kept, trailing #s stripped, runs before the bold/em
+passes so ** inside a heading still applies). .answer .mdh is bold,
+block-display, ink-colored in both themes. Headless-verified unit
+(renderAnswer direct eval) and e2e (fake-server answer with two
+headings: 2 spans, no raw ##, computed block/700).
+
 ## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
 
 Direct api.mistral.ai calls with a console key started returning HTTP
