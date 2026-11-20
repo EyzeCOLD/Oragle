@@ -137,6 +137,16 @@ def chat(backend, model, messages, temperature=0.1, tools=None, progress=None,
             raise LLMError("MISTRAL_API_KEY is not set.")
         headers["Authorization"] = f"Bearer {key}"
     payload = {"model": model, "messages": messages, "temperature": temperature}
+    if backend == "mistral":
+        # Billing router: bare API calls bill to the pay-as-you-go API
+        # bucket, which a Vibe-plan account has no budget for (402
+        # billing_no_api_budget_configured). A non-empty
+        # metadata.call_type is how Mistral's own clients mark a request
+        # to be billed to the subscription's Vibe allowance instead.
+        # Default "main_call"; MTG_MISTRAL_CALL_TYPE="" sends bare calls.
+        call_type = os.environ.get("MTG_MISTRAL_CALL_TYPE", "main_call").strip()
+        if call_type:
+            payload["metadata"] = {"call_type": call_type}
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"

@@ -193,6 +193,43 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(body["rules"][0]["number"], "704.1")
         self.assertEqual(len(body["rules"]), 2)  # subrule included
 
+    def test_symbol_route(self):
+        # img tags cannot send Authorization: symbol serving is open like
+        # /health. Cache-first; offline + uncached 404s (which the
+        # frontend's onerror turns back into literal {T} text).
+        import tempfile
+        from pathlib import Path
+        from unittest import mock as _mock
+        from mtgjudge import symbols as sym_mod
+        with tempfile.TemporaryDirectory() as tmp:
+            sym_dir = Path(tmp) / "symbols"
+            with _mock.patch.object(sym_mod, "SYMBOL_DIR", sym_dir):
+                # unbaked + uncached + offline = 404 (baked icons like T
+                # serve offline forever), no auth needed to see it
+                req = urllib.request.Request(self.base + "/symbol/ZZ.svg")
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(req, timeout=5)
+                self.assertEqual(ctx.exception.code, 404)
+
+                # bad codes never touch the filesystem
+                for bad in ("/symbol/..%2Fetc.svg",
+                            "/symbol/nope-nope"):
+                    req = urllib.request.Request(self.base + bad)
+                    with self.assertRaises(urllib.error.HTTPError) as ctx:
+                        urllib.request.urlopen(req, timeout=5)
+                    self.assertEqual(ctx.exception.code, 404)
+
+                # a cached icon serves with the SVG type and cache header
+                sym_dir.mkdir(parents=True, exist_ok=True)
+                (sym_dir / "ZZ.svg").write_bytes(b"<svg>icon</svg>")
+                with urllib.request.urlopen(
+                        self.base + "/symbol/ZZ.svg", timeout=5) as resp:
+                    self.assertEqual(resp.status, 200)
+                    self.assertEqual(resp.headers["Content-Type"],
+                                     "image/svg+xml")
+                    self.assertIn("max-age", resp.headers["Cache-Control"])
+                    self.assertEqual(resp.read(), b"<svg>icon</svg>")
+
 
 if __name__ == "__main__":
     unittest.main()

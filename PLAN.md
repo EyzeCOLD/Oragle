@@ -303,6 +303,77 @@ sand pile (gold/silver) glints and a stream falls through the neck —
 the sand element sits OUTSIDE the rotating element so the pile always
 stays in the visual bottom bulb through the flip.
 prefers-reduced-motion freezes it to a static hourglass.
+2026-11-20 redesign (user: "doesn't look like an hourglass at all"):
+the clip-path bowtie is replaced by hourglasses drawn as SVG data-URIs —
+a frame layer (caps, side posts, curved glass bulbs; bronze in wood,
+pewter in steel via body.steel overrides) that still carries the
+hg-flip rotation, and a sand layer (baked stream + curved pile) that
+stays gravity-fixed outside the rotation and glints via the hg-glint
+keyframe (brightness + opacity). The old ::before sand trick and
+hg-stream keyframes are gone. Reduced-motion still freezes it.
+2026-11-20 second follow-up: the dark-tint idea above was a dead end
+(user: "the bubble one is an abstract mess") and the real reason the two
+instances LOOKED like different animations was behavioral, not CSS:
+setStatus re-created the rail hourglass element every ~700ms poll
+iteration, and the flip window sat at 46% of the cycle — the rail copy
+was destroyed moments before every flip and so read as a serene static
+hourglass, while the bubble copy actually spun. Both experiments are
+replaced wholesale: the hourglass is now inline SVG modeled on the
+codepen the user linked from the start (codepen.io/mashul/pen/rPaqYE,
+"SVG Hourglass CSS Only Animation" by Marius Petrescu — bowtie glass,
+plates, top pile drains while the bottom pile rises, then the whole
+glass turns over; the snap back to upright on cycle restart is
+invisible because a full pile looks the same either way up). One
+<template id="hg-tpl"> markup serves both the rail and the bubble; the
+rail copy is a persistent element (#statushg) that setStatus merely
+hides/shows, so its cycle never restarts mid-poll. 3.4s cycle, amber
+sand + theme plates/stroke in both themes, reduced-motion freezes it.
+Verified headless in both themes: drain/rise/turn running, same
+markup everywhere, marker-tagged rail element survives poll cycles,
+hidden after done; 175 tests and the axe audit unchanged (still only
+the two pre-existing header contrast notes).
+Card symbols in the web frontend (2026-11-20, symbol-rendering branch):
+{2}{U/R}{U} in answers and expanded rulebox text now render as
+inline Scryfall SVG icons, 1.02em, both themes. Frontend renderSymbols()
+maps braces to codes (content minus slash, Scryfall capitalization:
+{W/U} -> "WU", {W/P} -> "WP", {T} -> "T", digits bare, {100}/underline
+forms stay literal text) and emits <img src="/symbol/{code}.svg">;
+onerror swaps the img back to the literal brace text, so unknown codes
+and first-touch offline degrade to exactly the old behavior. Backend:
+mtgjudge/symbols.py caches each icon under DATA_DIR/symbols (one
+Scryfall fetch per symbol ever, then fully offline), served by an OPEN
+/symbol/{code} route (img tags cannot send Authorization; like /health,
+no user data). Validated codes [0-9A-Za-z]{1,6}; offline+uncached = 404.
+Gotcha discovered live: scryfall svg filenames are UPPERCASE for
+letters (u.svg 404s, U.svg is real). Also fixed the recurring raw
+**bold** problem: the old bold regex captured [^*\n]+, so a bold span
+containing a nested *italic* failed whole and printed literally; the
+new capture allows single asterisks inside (nested em + kids play
+nice), and the em pass is guarded against touching <strong> edges.
+Both applied in renderAnswer and the rulebox expansion. Verified
+headless: 8/8 symbols load with correct srcs, bold/em nested case
+renders, unknown braces literal, axe + autoscroll + 169 tests green.
+
+Symbols pass 2 (2026-11-20, same branch): the icon set is now baked
+into the repo. 59 SVGs (268 KB) from api.scryfall.com/symbology live
+in mtgjudge/web/symbols (0-20, WUBRGSCXQ singles, T, and the canonical
+hybrids/phyrexians in Scryfall's official pairs — WU, UB, BR, RG, GW,
+2W-style, WP/UP/BP/RP/GP). License check: Scryfall serves these under
+the WotC Fan Content Policy, which permits free fan-app use of Wizards
+materials (no paywall, no repackaging); the required attribution is a
+"Card symbols and data courtesy of Scryfall." line in the gate panel
+(#gate .credit). symbols.py lookup order is now baked package dir ->
+DATA_DIR/symbols cache -> one live Scryfall fetch; after this commit
+the standard set never touches the network. Frontend HYBRID_CANON maps
+reversed pairs ({W/U} -> WU etc.) to the ten official orders before
+requesting /symbol/, so users typing hybrids backwards still get the
+right icon. Non-baked codes keep the old cache/fetch path (server test
+uses "ZZ"). Verified headless in both themes: hybrid canon renders
+WU/BG from reversed input, 8/8 baked symbols load, hourglass frame + 
+sand are the drawn SVGs with hg-flip running, 171 tests, axe (two
+pre-existing "needs review" header contrast notes, untouched by this
+branch) and autoscroll green. Screenshots: /tmp/oragle_hg2_*.png.
+
 Context bleed fix (2026-11-20, user-reported: "new session said hello,
 asked about the old topic"): two causes. The web client persisted the
 thread id in localStorage and restored it on every page load, and the
@@ -523,6 +594,57 @@ right), plus occasional name typos (Woship, Opalesecence). Report:
 bench2-last.md.
 
 ---
+
+Bubble footer rule citations are links (2026-11-20, same branch): the
+"context: ..." ids in the answer footer render as the same
+a.rule[data-rule] elements the answer body uses, so the delegated
+rulebox click handler works there too (fetches /rule, expands inline).
+Ids failing the ^[\d]+(\.[\d]+)*[a-z]{0,2}$ guard stay plain text (a
+malformed "weird id/x" stays inert rather than becoming a link).
+
+## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
+
+Direct api.mistral.ai calls with a console key started returning HTTP
+402 billing_no_api_budget_configured. Diagnosis with minimal curl
+probes: keys are valid (models list 200), but ANY completion 402s —
+newly created keys too. Mistral restructured billing Sept–Nov 2026
+(Pro's included API credit cut $30 to $25.50, then the separate
+API/Studio usage metrics merged; Studio is their rebranded developer
+console, and "Studio keys" are just PAYG API keys — where a key is
+CREATED doesn't matter). Current published model: a subscription
+covers the Vibe app and Vibe Code; "for an app, use a pay-as-you-go
+key" — the API bucket a plan account draws on for bare calls no
+longer exists for this account (support ticket open; may restore it).
+
+What actually routes billing (verified empirically 2026-11-20, same
+key, same model): a bare request 402s; a request whose body carries
+metadata.call_type="main_call" returns 200. Mistral's own clients mark
+requests this way, and the marker routes them to the subscription's
+Vibe allowance (255e/mo) instead of the (absent) PAYG bucket. There
+is no client fingerprinting — User-Agent is ignored.
+
+Implemented in llm.chat(): every mistral-backend payload now carries
+metadata.call_type; the value comes from MTG_MISTRAL_CALL_TYPE
+(default "main_call", empty string = bare API billing again). Shown in
+`oragle config` as "mistral billing marker". Unit-tested (default,
+override, disable, non-mistral backends never send it); verified live
+end to end (ask answered in 15s, billed to the plan).
+
+Honest caveat recorded up front: this presents our requests in the
+format Mistral uses to recognize Vibe traffic. It is the user's own
+subscription and their low-volume use, but it is not a documented
+third-party integration — if support's ticket answer restores PAYG
+credits or blesses another route, prefer that over the marker.
+
+Provider direction (decided 2026-11-20, marker is the interim): next
+provider of choice is Z.ai direct PAYG (GLM-5.3-Flash is the model
+already validated 11/11 on bench2; "$0.15 in / $0.50 out per 1M" ~
+one cent per question; older GLM-4.x-Flash models are genuinely
+free — a natural fallback tier). OpenRouter as the experimentation
+harness if model choice stays open. Not suitable: subscriptions of
+any kind for this single-user bursty workload, and Z.ai's Coding
+Plan specifically (terms-restricted to coding tools — the same gray
+zone as the marker).
 
 ## Known risks / things that will bite
 
