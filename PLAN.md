@@ -749,6 +749,22 @@ block-display, ink-colored in both themes. Headless-verified unit
 (renderAnswer direct eval) and e2e (fake-server answer with two
 headings: 2 spans, no raw ##, computed block/700).
 
+Web thread divider + deck reset (2026-11-21, user: "decklist doesn't
+clear when you start a new thread" and "bigger divider between
+threads"): the New thread handler never reset pendingDeck, so a
+decklist attached in one thread silently rode into the next thread's
+questions. The handler now clears pendingDeck, the deckpanel
+textarea, hides the open panel and resets the Deck (n) badge. The old
+"thin line of small text" thread marker (a .sysnote) is replaced by a
+.threadsep element: full-width flex row of two embossed brass rails
+(::before/::after, noise + tex-brass + gradient, steel-theme override
+with tex-steel) flanking an uppercase "new thread · fresh context"
+label. Headless e2e against the fake server: deck badge Deck (2) -> after
+click reset to "Deck", textarea and panel cleared, one .threadsep
+child of chat with correct computed display/color in both themes;
+deck attach still works and still logs "decklist attached: n lines"
+within a thread.
+
 ## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
 
 Direct api.mistral.ai calls with a console key started returning HTTP
