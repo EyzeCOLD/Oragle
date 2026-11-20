@@ -611,6 +611,34 @@ Lesson recorded: verify hidden/collapsed UI by computed display, not
 by the attribute — the earlier headless check read the property and
 passed a visible bug.
 
+## Public packaging (2026-11-20, public-packaging branch)
+
+Goal: a stranger can clone the repo and run oragle on their own API.
+Mistral-specific setup is demoted from the docs (and from default
+behavior) without breaking this user's own setup:
+
+- llm.py gains a generic `openai` backend (any OpenAI-compatible
+  endpoint): MTG_API_BASE selects it, MTG_API_KEY authenticates,
+  MTG_MODEL or the endpoint's /models listing picks the model.
+  MTG_BACKEND forces any backend explicitly; auto-detect order:
+  MTG_BACKEND -> MTG_API_BASE -> MISTRAL_API_KEY -> local servers.
+- MTG_MISTRAL_CALL_TYPE is now OFF by default (bare API billing) —
+  safe for strangers whose accounts bill PAYG; the marker stays a
+  documented-in-code opt-in. THIS USER's own .env (gitignored, never
+  committed) carries MTG_MISTRAL_CALL_TYPE=main_call, so local
+  behavior is unchanged. Do not commit that line anywhere.
+- README rewritten user-first (what it is, setup, provider-agnostic
+  API section, commands, web/deploy, config table, credits);
+  dev/archaeology content removed from it and lives here (PLAN.md),
+  conventions captured in AGENTS.md; bench question sets moved to
+  dev/ (cmd_bench default resolves ./bench.txt then dev/bench.txt);
+  .env.example added and un-ignored; .gitignore gains .pytest_cache/
+  and the !.env.example exception.
+
+The design is BYO-endpoint: the project never depended on Mistral
+specifics beyond the named-backend convenience, and detection is now
+generic-first.
+
 ## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
 
 Direct api.mistral.ai calls with a console key started returning HTTP

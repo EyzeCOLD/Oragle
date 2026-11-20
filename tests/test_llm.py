@@ -227,43 +227,73 @@ class MistralCallTypeTest(unittest.TestCase):
 
     def _fake_post(self):
         def fake_post(url, payload, headers=None, timeout=0):
-            self.calls.append(payload)
+            self.calls.append((url, payload, headers))
             return text_response("ok")
         return fake_post
 
-    def test_call_type_marker_sent_by_default(self):
+    def test_call_type_marker_off_by_default(self):
+        # clear=True: other tests may load the developer's real .env
+        # (which can set MTG_MISTRAL_CALL_TYPE); the default must still
+        # be "no marker" in a clean environment.
         with mock.patch.object(llm.net, "post_json",
                                side_effect=self._fake_post()), \
-             mock.patch.dict(os.environ, {"MISTRAL_API_KEY": "k"}):
+             mock.patch.dict(os.environ, {"MISTRAL_API_KEY": "k"},
+                             clear=True):
             llm.chat("mistral", "m", [{"role": "user", "content": "q"}])
-        self.assertEqual(self.calls[0]["metadata"],
+        self.assertNotIn("metadata", self.calls[0][1])
+
+    def test_call_type_marker_enabled_via_env(self):
+        with mock.patch.object(llm.net, "post_json",
+                               side_effect=self._fake_post()), \
+             mock.patch.dict(os.environ,
+                             {"MISTRAL_API_KEY": "k",
+                              "MTG_MISTRAL_CALL_TYPE": "main_call"}):
+            llm.chat("mistral", "m", [{"role": "user", "content": "q"}])
+        self.assertEqual(self.calls[0][1]["metadata"],
                          {"call_type": "main_call"})
-
-    def test_call_type_marker_respects_env_override(self):
-        with mock.patch.object(llm.net, "post_json",
-                               side_effect=self._fake_post()), \
-             mock.patch.dict(os.environ,
-                             {"MISTRAL_API_KEY": "k",
-                              "MTG_MISTRAL_CALL_TYPE": "sub_call"}):
-            llm.chat("mistral", "m", [{"role": "user", "content": "q"}])
-        self.assertEqual(self.calls[0]["metadata"],
-                         {"call_type": "sub_call"})
-
-    def test_call_type_marker_disabled_with_empty_value(self):
-        with mock.patch.object(llm.net, "post_json",
-                               side_effect=self._fake_post()), \
-             mock.patch.dict(os.environ,
-                             {"MISTRAL_API_KEY": "k",
-                              "MTG_MISTRAL_CALL_TYPE": ""}):
-            llm.chat("mistral", "m", [{"role": "user", "content": "q"}])
-        self.assertNotIn("metadata", self.calls[0])
 
     def test_other_backends_never_send_marker(self):
         with mock.patch.object(llm.net, "post_json",
                                side_effect=self._fake_post()), \
-             mock.patch.dict(os.environ, {"MTG_MISTRAL_CALL_TYPE": "x"}):
+             mock.patch.dict(os.environ, {"MTG_MISTRAL_CALL_TYPE": "x",
+                                          "MTG_API_KEY": "sk"}):
             llm.chat("lmstudio", "m", [{"role": "user", "content": "q"}])
-        self.assertNotIn("metadata", self.calls[0])
+            llm.chat("openai", "m", [{"role": "user", "content": "q"}])
+        for _url, payload, _headers in self.calls:
+            self.assertNotIn("metadata", payload)
+
+
+class OpenAIBackendTest(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+
+    def test_resolves_when_api_base_set(self):
+        with mock.patch.dict(os.environ, {"MTG_API_BASE": "https://x/v1"}):
+            self.assertEqual(llm.resolve_backend(), "openai")
+
+    def test_backend_env_wins(self):
+        with mock.patch.dict(os.environ, {"MTG_API_BASE": "https://x/v1",
+                                          "MTG_BACKEND": "ollama"}):
+            self.assertEqual(llm.resolve_backend(), "ollama")
+
+    def test_chat_uses_base_and_key(self):
+        def fake_post(url, payload, headers=None, timeout=0):
+            self.calls.append((url, headers))
+            return text_response("ok")
+        with mock.patch.object(llm.net, "post_json", side_effect=fake_post), \
+             mock.patch.dict(os.environ,
+                             {"MTG_API_BASE": "https://api.example.com/v1",
+                              "MTG_API_KEY": "sk-x"}):
+            llm.chat("openai", "m", [{"role": "user", "content": "q"}])
+        self.assertEqual(self.calls[0][0],
+                         "https://api.example.com/v1/chat/completions")
+        self.assertEqual(self.calls[0][1]["Authorization"], "Bearer sk-x")
+
+    def test_chat_requires_key(self):
+        with mock.patch.dict(os.environ, {"MTG_API_BASE": "https://x/v1",
+                                          "MTG_API_KEY": ""}):
+            with self.assertRaises(llm.LLMError):
+                llm.chat("openai", "m", [{"role": "user", "content": "q"}])
 
 
 if __name__ == "__main__":

@@ -447,8 +447,10 @@ def settings_report(backend=None, model=None):
     model = model or os.environ.get("MTG_MODEL") or llm.default_model(backend)
     slow_after, fallback_model = _watchdog_settings(backend)
     rows = [
-        ("backend", backend, envfile.origin("MISTRAL_API_KEY")
-         if backend == "mistral" else None),
+        ("backend", backend, envfile.origin("MTG_BACKEND")
+         or (envfile.origin("MTG_API_BASE") if backend == "openai" else None)
+         or (envfile.origin("MISTRAL_API_KEY")
+             if backend == "mistral" else None)),
         ("model", model, envfile.origin("MTG_MODEL")),
         ("fallback model", fallback_model or "(none)",
          envfile.origin("MTG_FALLBACK_MODEL")),
@@ -458,10 +460,14 @@ def settings_report(backend=None, model=None):
          envfile.origin("MTG_LLM_TIMEOUT")),
         ("command", "oragle config   (REPL: :config)", None),
     ]
+    if backend == "openai":
+        rows.insert(1, (
+            "api base", llm._base_url("openai"),
+            envfile.origin("MTG_API_BASE")))
     if backend == "mistral":
-        # Vibe-plan billing router marker; see llm.chat()
+        # mistral billing router marker; see llm.chat(). Off unless set.
         call_type = os.environ.get("MTG_MISTRAL_CALL_TYPE",
-                                   "main_call").strip()
+                                   "").strip()
         rows.insert(-1, (
             "mistral billing marker",
             f"call_type={call_type}" if call_type else "(bare API billing)",
@@ -1179,7 +1185,10 @@ def main(argv=None):
     p.set_defaults(func=cmd_ask)
 
     p = sub.add_parser("bench", help="run benchmark questions from a file through the ask pipeline")
-    p.add_argument("file", nargs="?", default="bench.txt")
+    p.add_argument("file", nargs="?",
+                   default="bench.txt" if os.path.exists("bench.txt")
+                   else str(Path(__file__).resolve().parent.parent
+                            / "dev" / "bench.txt"))
     p.add_argument("--only", help="comma-separated question numbers (1-based), e.g. '1,4'")
     p.add_argument("--top", type=int, default=8)
     p.add_argument("--report", default="bench-last.md")
