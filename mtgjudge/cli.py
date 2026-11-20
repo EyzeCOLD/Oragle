@@ -16,10 +16,45 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from . import carddb, cards, cr, deck, envfile, llm, net, search, store
 from . import ansi
 from .spinner import Spinner
+
+
+def cmd_setup(args):
+    """One command for a clean install: builds the local data (rules +
+    card database) and checks the LLM provider, with guidance instead
+    of stack traces when a step is missing."""
+    print("oragle setup — building local data, then checking the provider.")
+    print()
+    print("[1/3] Comprehensive Rules")
+    cmd_refresh(SimpleNamespace(target="rules", url=None))
+    print()
+    print("[2/3] Card database (Oracle bulk dump, ~25 MB)")
+    cmd_refresh(SimpleNamespace(target="cards"))
+    print()
+    print("[3/3] LLM provider")
+    try:
+        backend = llm.resolve_backend(args.backend)
+        model = llm.default_model(backend)
+    except llm.LLMError as e:
+        print(f"not configured yet: {e}")
+        print()
+        print("Copy .env.example to .env and fill in your API key:")
+        print("  cp .env.example .env && $EDITOR .env")
+        print("(see the README's 'Pointing it at your LLM' section for")
+        print(" providers and variables)")
+        print()
+        print("The local commands (search/rule/card) already work now;")
+        print("questions need the provider.")
+        return 1
+    print(f"using: {backend} ({model}) — see `oragle config`")
+    print()
+    print("Done. Try it:")
+    print("  oragle ask \"does deathtouch ignore damage prevention?\"")
+    return 0
 
 
 def cmd_refresh(args):
@@ -107,20 +142,6 @@ def cmd_card(args):
     return 0
 
 
-def cmd_cards(args):
-    query = " ".join(args.query)
-    found, total = cards.search_cards(query, limit=args.top)
-    if not found:
-        print(f"No cards matched {query!r}. Check the Scryfall syntax "
-              "(e.g. c<=2 colors:blue t:instant o:exile).")
-        return 1
-    print(f"{total} match(es); showing {len(found)}:\n")
-    for card in found:
-        print(cards.format_card(card))
-        print()
-    return 0
-
-
 def _print_rule(rule, score=None):
     heading = " - ".join(h for h in [rule["chapter"], rule["section"]] if h)
     suffix = f"  (score {score:.3f})" if score is not None else ""
@@ -138,24 +159,74 @@ Answering rules:
 - Never invent rule numbers or rule text. Only cite rules that appear in the context blocks.
 - Be concise: direct answer first, then the reasoning with citations.
 - The rules excerpts are from the Comprehensive Rules, effective {date}.
-- If the user asks which cards exist or meet some criteria (mana value, color, format legality, oracle text containing something), use the search_cards tool with a Scryfall syntax query instead of answering from memory. Examples: color<=2 colors:blue oracle:"exile target creature". Format-legal questions use legal:pauper / legal:modern / etc.
-- Card references the user intended arrive as blocks titled CARD <name>. A card name in the question without such a block has NOT been resolved: use the search_cards tool with an exact-name query (e.g. !"Lightning Helix") to fetch its Oracle text, then answer grounded in the returned text. Never describe a card's printed text from memory.
+- If the user asks which cards exist or meet some criteria (mana value, colors, format legality, oracle text containing something), query the local card database with the query_local_cards SQL tool instead of answering from memory. Use search_scryfall (live) ONLY for information the local database does not contain: printings, sets, artists, rarity, prices, variants, cards newer than the import date in meta, or genuinely fuzzy word discovery.
+- Card references the user intended arrive as blocks titled CARD <name>. A card name in the question without such a block has NOT been resolved: use query_local_cards to fetch its row (e.g. SELECT name, mana_cost, type_line, oracle_text, power, toughness FROM cards WHERE lookup_all LIKE '%Lightning Helix %'), then answer grounded in the returned text. Never describe a card's printed text from memory.
 - A CARD block reading NOT FOUND means no card has that exact name. Say it was not found and, if similar card names are listed in the block, offer them to the user — do not answer as though any of them had been resolved.
 - If part of the question involves rules NOT present in the context blocks (e.g. the legend rule for two copies of a legendary card, or how hybrid mana symbols determine color), do not fill the gap from memory: use the search_rules tool with rule keywords (e.g. "legendary permanent same name" or "hybrid mana symbol colors") to fetch the relevant rules, then answer citing them.
 - The conversation may include earlier turns; use them only to resolve references in the current question (e.g. "what about two headed giant?" refers to the earlier topic). Earlier turns never justify claims on their own: every statement in your answer must still be grounded in the current context blocks and cited, or met with "This is not covered in the retrieved rules."
 - A pasted decklist arrives as CARD blocks noting copies "in the decklist". Answer rules questions about its composition (interactions, combos, legality, what happens when its cards meet) with citations as usual. You are NOT a deck advisor: for evaluation or improvement questions ("is this deck good", "what should I cut", "what would make this competitive") say briefly that you are a rules judge without a metagame model, so you cannot rank or suggest strategies or cards outside the provided context, and offer the rules-grounded part if one exists.
 """
 
-SEARCH_CARDS_TOOL = {
+QUERY_CARDS_TOOL = {
     "type": "function",
     "function": {
-        "name": "search_cards",
+        "name": "query_local_cards",
         "description": (
-            "Search Magic: the Gathering cards with a Scryfall syntax query. "
-            "Use for 'which cards...' questions. Filters include color/mana "
-            "(c<=2), colors (colors:blue or c:u), type (t:instant), oracle text "
-            "(o:exile, o:\"exile target creature\"), legality (legal:pauper), "
-            "and free text. Multiple filters are space-separated AND."
+            "Read-only SQL over the local card database (SQLite; instant, "
+            "free, offline). PREFER this over search_scryfall: use the "
+            "Scryfall tool only for what is not stored here (printings, "
+            "sets, artists, rarity, prices, variants, brand-new cards, "
+            "fuzzy discovery). One row per Oracle card. cards columns: "
+            "name, mana_cost ('{1}{W}{U}' style, faces joined ' // '), "
+            "cmc REAL, colors (canonical subset like 'WU', '' = colorless), "
+            "color_identity, type_line (all faces joined ' // '), "
+            "oracle_text, keywords (space padded: ' flying menace '), "
+            "oracle_all (like keywords, whole oracle text), power, "
+            "toughness, loyalty, layout, released_at, edhrec_rank, and "
+            "legality_standard/pioneer/modern/legacy/vintage/pauper/"
+            "commander/brawl/historic/alchemy/oathbreaker/duel each "
+            "'legal'/'not_legal'/'banned'/'restricted'. lookup_all holds "
+            "space-padded lowercase face names with accents stripped and "
+            "apostrophes removed, other punctuation turned into spaces "
+            "('Jeska's Will' -> 'jeskas will', 'Grist, the Hunger Tide' -> "
+            "'grist the hunger tide') - match with LIKE '%lightning helix %' "
+            "(mind the trailing space; SQLite LIKE is case-insensitive). "
+            "meta(key, value) holds "
+            "bulk_updated_at (the import date). "
+            "Exact single-card lookup: SELECT name, mana_cost, type_line, "
+            "oracle_text, power, toughness, loyalty FROM cards WHERE "
+            "lookup_all LIKE '%Lightning Helix %'. "
+            "Examples: SELECT COUNT(*) FROM cards WHERE type_line LIKE "
+            "'%Creature%' AND colors LIKE '%U%'; SELECT name, colors, "
+            "type_line, edhrec_rank FROM cards WHERE length(colors) <= 2 "
+            "AND legality_pauper = 'legal' AND oracle_all LIKE '% exile "
+            "%' ORDER BY edhrec_rank LIMIT 10."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sql": {
+                    "type": "string",
+                    "description": "One read-only SELECT statement over cards/rulings/meta.",
+                },
+            },
+            "required": ["sql"],
+        },
+    },
+}
+
+SEARCH_SCRYFALL_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "search_scryfall",
+        "description": (
+            "Live Scryfall card search (network). Use ONLY when "
+            "query_local_cards cannot answer: printing/set/artist/rarity/"
+            "price/variant information, cards newer than the local import "
+            "date, or fuzzy word discovery. Full Scryfall syntax: color "
+            "(c<=2, colors:blue), type (t:instant), oracle text "
+            "(o:exile, o:\"exile target creature\"), legality "
+            "(legal:pauper), and more."
         ),
         "parameters": {
             "type": "object",
@@ -203,9 +274,14 @@ SEARCH_RULES_TOOL = {
 }
 
 
-def _search_cards_runner(name, args):
-    if name != "search_cards":
-        return f"error: no such tool '{name}'"
+def _scryfall_runner(args, offline=False):
+    """Live Scryfall search only — the local database answers everything
+    name- or property-keyed via query_local_cards, so this tool exists
+    for what is not stored (printings, sets, artists, rarity, prices,
+    brand-new cards) plus fuzzy discovery."""
+    if offline:
+        return ("error: scryfall_search is disabled in offline mode; use "
+                "query_local_cards (the local database) instead")
     query = (args.get("query") or "").strip()
     if not query:
         return "error: empty query"
@@ -219,30 +295,31 @@ def _search_cards_runner(name, args):
     return cards.format_search_brief(found, total)
 
 
-EXACT_QUERY_RE = re.compile(r'^!\s*"([^"]+)"|^!\s*(\S+)$')
-
-# An exact-name search_cards lookup (!"Name") happens only when the
+# An exact-name lookup via query_local_cards happens only when the
 # question named a card without [[ ]] brackets -- user-caused extra
 # work. Point it out politely: once per answer, interactive stderr
 # only, never for names already resolved via [[Name]].
 UNBRACKETED_HINT = ("please surround card names such as [[{name}]] with "
                     "brackets for an exact lookup")
 
-
-def _exact_card_query(query):
-    """The card name from an exact-name Scryfall query, else None."""
-    m = EXACT_QUERY_RE.match(query)
-    if not m:
-        return None
-    return (m.group(1) or m.group(2) or "").strip() or None
+# The prompt's canonical exact-lookup idiom is lookup_all LIKE '%Name %';
+# the captured literal is the card the model is resolving.
+_EXACT_LIKE_RE = re.compile(r"lookup_all\s+LIKE\s+'%([^%']+)%'", re.IGNORECASE)
 
 
-def make_tool_runner(chunks, referenced=(), emit=None):
-    """Runs both model tools: search_cards (Scryfall, online) and
-    search_rules (local BM25 over the Comprehensive Rules).
-    `referenced` names (cards already resolved from [[ ]] refs) suppress
-    the unbracketed-name hint. `emit` (used by the web server) receives
-    the hint as an event instead of terminal stderr."""
+def _lookup_name_from_sql(sql):
+    m = _EXACT_LIKE_RE.search(sql or "")
+    return m.group(1).strip() if m else None
+
+
+def make_tool_runner(chunks, referenced=(), emit=None, offline=False):
+    """Runs the model tools: search_rules (local BM25 over the
+    Comprehensive Rules), query_local_cards (read-only SQL over the
+    card database — see carddb.run_sql) and search_scryfall (live
+    Scryfall; refused fast in offline mode). `referenced` names (cards
+    already resolved from [[ ]] refs) suppress the unbracketed-name
+    hint. `emit` (used by the web server) receives the hint as an event
+    instead of terminal stderr."""
 
     referenced_names = {carddb.normalize_name(n) for n in referenced}
     hinted = {"done": False}
@@ -263,11 +340,16 @@ def make_tool_runner(chunks, referenced=(), emit=None):
               file=sys.stderr, flush=True)
 
     def runner(name, args):
-        if name == "search_cards":
-            card = _exact_card_query((args.get("query") or "").strip())
+        if name == "search_scryfall":
+            return _scryfall_runner(args, offline=offline)
+        if name == "query_local_cards":
+            sql = (args.get("sql") or "").strip()
+            if not sql:
+                return "error: empty query"
+            card = _lookup_name_from_sql(sql)
             if card:
                 hint(card)
-            return _search_cards_runner(name, args)
+            return carddb.run_sql(sql)
         if name == "search_rules":
             query = (args.get("query") or "").strip()
             if not query:
@@ -672,13 +754,13 @@ def answer_question(question, top=8, offline=False, backend=None, model=None,
     backend = backend or llm.resolve_backend()
     model = model or llm.default_model(backend)
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(date=meta["effective_date"])
-    tools = [SEARCH_RULES_TOOL]  # local: works offline
+    tools = [SEARCH_RULES_TOOL, QUERY_CARDS_TOOL]  # local: work offline
     if not offline:
-        tools.append(SEARCH_CARDS_TOOL)
+        tools.append(SEARCH_SCRYFALL_TOOL)
     card_names = re.findall(r"^CARD (.+)$",
                             "\n".join(blocks), re.MULTILINE)
     tool_runner = make_tool_runner(chunks, referenced=card_names,
-                                   emit=emit)
+                                   emit=emit, offline=offline)
     stream_hook, stream_finish, stream_mark = (
         _make_stream_printer(card_names, spin) if stream_output
         else (None, None, None))
@@ -1148,6 +1230,11 @@ def main(argv=None):
     p.add_argument("--url", help="optional CR .txt URL override (rules target)")
     p.set_defaults(func=cmd_refresh)
 
+    p = sub.add_parser("setup", help="one command for a clean install: rules + cards + provider check")
+    p.add_argument("--backend", default=None,
+                   help="force a backend {openai,mistral,lmstudio,ollama}")
+    p.set_defaults(func=cmd_setup)
+
     p = sub.add_parser("stats", help="show index stats")
     p.set_defaults(func=cmd_stats)
 
@@ -1168,11 +1255,6 @@ def main(argv=None):
     p.add_argument("--offline", action="store_true",
                    help="use only the local card database (no network)")
     p.set_defaults(func=cmd_card)
-
-    p = sub.add_parser("cards", help="search cards with Scryfall syntax (c<=2 colors:blue o:exile)")
-    p.add_argument("query", nargs="+")
-    p.add_argument("--top", type=int, default=10)
-    p.set_defaults(func=cmd_cards)
 
     p = sub.add_parser("ask", help="answer a rules question with citations")
     p.add_argument("question", nargs="+")

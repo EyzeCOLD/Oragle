@@ -16,6 +16,7 @@ import io
 import json
 import re
 import sqlite3
+import time
 import unicodedata
 from datetime import datetime, timezone
 
@@ -27,10 +28,19 @@ BULK_TYPE = "oracle_cards"
 CHECK_INTERVAL_HOURS = 24
 STALE_AFTER_DAYS = 14
 
+# Legality columns kept per card (Scryfall's legalities keys, pruned to
+# the formats worth a model's query). "not_legal" is the stored default.
+LEGALITY_FORMATS = ("standard", "pioneer", "modern", "legacy", "vintage",
+                    "pauper", "commander", "brawl", "historic", "alchemy",
+                    "oathbreaker", "duel")
+SCHEMA_VERSION = "2"
+
 # Layouts deprioritized when multiple names tie in fuzzy matches.
 NON_PAPER_LAYOUTS = ("token", "art_series", "emblem", "vanguard", "plane", "scheme", "double_faced_token")
 
-SCHEMA = """
+_LEGALITY_COLS = ",\n".join(f"    legality_{f} TEXT" for f in LEGALITY_FORMATS)
+
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS cards (
     id          TEXT PRIMARY KEY,
@@ -45,7 +55,13 @@ CREATE TABLE IF NOT EXISTS cards (
     loyalty     TEXT,
     layout      TEXT,
     released_at TEXT,
-    edhrec_rank INTEGER
+    edhrec_rank INTEGER,
+    cmc          REAL,
+    colors       TEXT,
+    color_identity TEXT,
+    keywords     TEXT,
+    oracle_all   TEXT,
+{_LEGALITY_COLS}
 );
 CREATE INDEX IF NOT EXISTS idx_cards_lookup_all ON cards(lookup_all);
 CREATE TABLE IF NOT EXISTS rulings (
@@ -101,6 +117,14 @@ def _row_to_card(row):
     }
 
 
+def _canon_colors(card):
+    """Colors of all faces, canonical WUBRG order, e.g. 'WU' ('' = none)."""
+    letters = set(card.get("colors") or [])
+    for face in card.get("card_faces") or []:
+        letters.update(face.get("colors") or [])
+    return "".join(c for c in "WUBRG" if c in letters)
+
+
 def _bulk_row_from_card(card):
     """Flatten a bulk JSONL card object to DB row shape (multi-face merged)."""
     faces = card.get("card_faces") or []
@@ -109,6 +133,10 @@ def _bulk_row_from_card(card):
     mana_parts += [f.get("mana_cost") for f in faces]
     type_parts = [f.get("type_line") for f in faces]
     text_parts = [f.get("oracle_text") for f in faces]
+    oracle_text = (card.get("oracle_text")
+                   or " // ".join(p for p in text_parts if p) or "")
+    legal = card.get("legalities") or {}
+    keywords = card.get("keywords") or []
     row = {
         "id": card["id"],
         "name": card.get("name"),
@@ -116,13 +144,20 @@ def _bulk_row_from_card(card):
         "nospace": "",
         "mana_cost": " // ".join(p for p in mana_parts if p) or "",
         "type_line": card.get("type_line") or " // ".join(p for p in type_parts if p) or "",
-        "oracle_text": card.get("oracle_text") or " // ".join(p for p in text_parts if p) or "",
+        "oracle_text": oracle_text,
         "power": card.get("power"),
         "toughness": card.get("toughness"),
         "loyalty": card.get("loyalty") or next((f.get("loyalty") for f in faces if f.get("loyalty")), None),
         "layout": card.get("layout"),
         "released_at": card.get("released_at"),
         "edhrec_rank": card.get("edhrec_rank"),
+        "cmc": card.get("cmc"),
+        "colors": _canon_colors(card),
+        "color_identity": "".join(c for c in "WUBRG"
+                                  if c in (card.get("color_identity") or [])),
+        "keywords": " " + " ".join(keywords) + " " if keywords else "",
+        "oracle_all": " " + " ".join(oracle_text.split()) + " " if oracle_text else "",
+        **{f"legality_{f}": legal.get(f, "not_legal") for f in LEGALITY_FORMATS},
     }
     row["nospace"] = row["lookup_all"].replace(" ", "")
     return row
@@ -142,6 +177,12 @@ def build_from_bulk(entry, db_file=None, progress=None):
     compressed = net._open(entry["jsonl_download_uri"], timeout=600, accept=None)
     conn = connect(db_file)
     try:
+        if not has_query_schema(conn):
+            # Pre-v2 table shape (no queryable columns): the import is a
+            # full replace anyway, so drop and recreate the cards table;
+            # rulings (separate table, stable Scryfall ids) survive.
+            conn.execute("DROP TABLE IF EXISTS cards")
+            conn.executescript(SCHEMA)
         # Full replace: the dump is the source of truth for card content.
         # Rulings (keyed by stable Scryfall ids) survive the re-import.
         conn.execute("DELETE FROM cards")
@@ -166,19 +207,25 @@ def build_from_bulk(entry, db_file=None, progress=None):
         _set_meta(conn, "bulk_downloaded_at", datetime.now(timezone.utc).isoformat())
         _set_meta(conn, "card_count", str(count))
         _set_meta(conn, "bulk_check_at", datetime.now(timezone.utc).isoformat())
+        _set_meta(conn, "schema_version", SCHEMA_VERSION)
     finally:
         conn.close()
     return count
 
 
 def _insert_cards(conn, rows):
+    cols = ("id, name, lookup_all, nospace, mana_cost, type_line, "
+            "oracle_text, power, toughness, loyalty, layout, released_at, "
+            "edhrec_rank, cmc, colors, color_identity, keywords, oracle_all, "
+            + ", ".join(f"legality_{f}" for f in LEGALITY_FORMATS))
+    bindings = ", ".join(f":{c}" for c in (
+        "id", "name", "lookup_all", "nospace", "mana_cost", "type_line",
+        "oracle_text", "power", "toughness", "loyalty", "layout",
+        "released_at", "edhrec_rank", "cmc", "colors", "color_identity",
+        "keywords", "oracle_all",
+        *(f"legality_{f}" for f in LEGALITY_FORMATS)))
     conn.executemany(
-        """INSERT OR REPLACE INTO cards
-           (id, name, lookup_all, nospace, mana_cost, type_line, oracle_text,
-            power, toughness, loyalty, layout, released_at, edhrec_rank)
-           VALUES (:id, :name, :lookup_all, :nospace, :mana_cost, :type_line,
-                   :oracle_text, :power, :toughness, :loyalty, :layout,
-                   :released_at, :edhrec_rank)""",
+        f"INSERT OR REPLACE INTO cards ({cols}) VALUES ({bindings})",
         rows,
     )
     conn.commit()
@@ -362,6 +409,102 @@ def _has_rulings(conn, card_id):
         "SELECT 1 FROM rulings WHERE card_id = ? LIMIT 1", (card_id,)
     ).fetchone()
     return row is not None
+
+
+# ---- model-facing SQL tool ---------------------------------------------
+
+QUERY_TIME_LIMIT_S = 2.0
+QUERY_BUDGET = 4000          # chars of serialized rows before truncation
+CELL_TRUNC = 600              # long texts (oracle_all!) get cut per cell
+
+
+def has_query_schema(conn=None):
+    """True when the cards table carries the queryable columns (v2 import
+    via `oragle refresh cards`); False for pre-v2 databases."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(cards)")}
+        return "colors" in cols and "oracle_all" in cols
+    finally:
+        if own:
+            conn.close()
+
+
+def run_sql(sql, db_file=None, budget=QUERY_BUDGET):
+    """One read-only SQL statement over the card database, for the
+    query_local_cards tool. Safety is by construction, not prompt-
+    pleading, because the model is an adversarial user by definition:
+    the file opens mode=ro (OS-level: the handle cannot write),
+    PRAGMA query_only blocks anything a ro handle could still reach,
+    and an authorizer denies every action but SELECT/READ/FUNCTION/
+    RECURSIVE — so no writes, no ATTACH of other databases, no exotic
+    statements. A progress-handler deadline interrupts runaway scans.
+    Output is budgeted, not row-capped: aggregates return entirely;
+    wide results truncate with a note that teaches narrower SELECTs.
+    Returns a string (JSON row per line), never raises.
+    """
+    db_file = db_file or DB_FILE
+    if not db_file.exists():
+        return ("error: no local card database yet. Build it with "
+                "`oragle refresh cards` (or `oragle setup`).")
+    try:
+        conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+    except sqlite3.Error as e:  # pragma: no cover
+        return f"error: cannot open card database: {e}"
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only = ON")
+        if not has_query_schema(conn):
+            return ("error: local card database predates the queryable "
+                    "schema. Rebuild it: `oragle refresh cards`.")
+        sqlite3.enable_callback_tracebacks(False)
+
+        def _auth(action, *_args):
+            if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ,
+                          sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_RECURSIVE):
+                return sqlite3.SQLITE_OK
+            return sqlite3.SQLITE_DENY
+
+        conn.set_authorizer(_auth)
+
+        deadline = time.monotonic() + QUERY_TIME_LIMIT_S
+
+        def _tick():
+            return 1 if time.monotonic() > deadline else 0
+
+        conn.set_progress_handler(_tick, 5000)
+        try:
+            cur = conn.execute(sql)
+        except sqlite3.Error as e:
+            return f"error: {e}"
+        if cur.description is None:
+            return "ok (no result rows)"
+        cols = [d[0] for d in cur.description]
+        lines, size, truncated = [], 0, False
+        while not truncated:
+            rows = cur.fetchmany(64)
+            if not rows:
+                break
+            for row in rows:
+                obj = {}
+                for col in cols:
+                    v = row[col]
+                    if isinstance(v, str) and len(v) > CELL_TRUNC:
+                        v = v[:CELL_TRUNC - 3] + "..."
+                    obj[col] = v
+                line = json.dumps(obj)
+                lines.append(line)
+                size += len(line)
+                if size > budget:
+                    truncated = True
+                    break
+        if truncated:
+            lines.append(f"result truncated at {len(lines)} rows (~{size} "
+                         "chars): add a LIMIT or project fewer columns")
+        return "\n".join(lines) or "0 rows"
+    finally:
+        conn.close()
 
 
 def freshness_notice(force_check=False, offline=False, db_file=None):

@@ -270,6 +270,14 @@
                 inset 0 -2px 3px rgba(0, 0, 0, .5);
     opacity: .92;
   }
+  .answer .mdh {  /* markdown heading line, sans the raw # marks */
+    display: block;
+    font-weight: 700;
+    margin: .6em 0 .15em;
+    font-size: 1.04em;
+    letter-spacing: .3px;
+  }
+  .answer .mdh:first-child { margin-top: 0; }
   .answer.error {
     background: var(--noise),
                 linear-gradient(170deg, #45221a, #2b120c);
@@ -311,6 +319,34 @@
     font-size: 12.5px;
     padding: 2px 8px;
     text-shadow: 0 1px 0 #000, 0 0 8px rgba(217, 178, 95, .25);
+  }
+  .threadsep {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 22px 14px 10px;
+    color: #d9b25f;
+    font-size: 11.5px;
+    font-style: italic;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-shadow: 0 1px 0 #000;
+    white-space: nowrap;
+  }
+  .threadsep::before, .threadsep::after {
+    content: "";
+    flex: 1;
+    height: 8px;
+    border: 1px solid #060503;
+    border-radius: 3px;
+    background:
+      radial-gradient(60% 100% at 50% 100%, rgba(0, 0, 0, .4), transparent),
+      var(--noise), var(--tex-brass),
+      linear-gradient(180deg, #5c4a24, #352610 55%, #4a3818);
+    box-shadow: inset 0 1px 0 rgba(255, 230, 160, .28),
+                inset 0 -2px 3px rgba(0, 0, 0, .75),
+                0 2px 4px rgba(0, 0, 0, .5);
   }
 
   /* ---- hint rail: brushed brass ---------------------------------------- */
@@ -607,6 +643,19 @@
     color: #b9cde0;
     text-shadow: 0 1px 0 #000, 0 0 8px rgba(150, 200, 240, .3);
   }
+  body.steel .threadsep {
+    color: #b9cde0;
+    text-shadow: 0 1px 0 #000;
+  }
+  body.steel .threadsep::before, body.steel .threadsep::after {
+    background:
+      radial-gradient(60% 100% at 50% 100%, rgba(0, 0, 0, .45), transparent),
+      var(--noise), var(--tex-steel),
+      linear-gradient(180deg, #3f4852, #20262d 55%, #333c45);
+    box-shadow: inset 0 1px 0 #8fa2b4,
+                inset 0 -2px 2px #05070a,
+                0 2px 0 rgba(0, 0, 0, .7);
+  }
   body.steel ::placeholder { color: #8b96a0; }
   body.steel form input:focus, body.steel #deckpanel textarea:focus,
   body.steel #gate input:focus {
@@ -855,6 +904,12 @@ function renderAnswer(text, cardNames) {
   // lookarounds reject positions adjacent to > and <.
   let html = text
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // markdown headings (#..######) become styled block lines; the model
+  // emits them and they used to print raw (CLI already handles them)
+  html = html.replace(/^#{1,6}[ \t]+.*$/gm, m => {
+    const title = m.replace(/^#{1,6}[ \t]+/, "").replace(/#+$/, "").trim();
+    return '<span class="mdh">' + title + "</span>";
+  });
   // bold: content may itself contain single asterisks (nested italic);
   // the old [^*\n]+ capture failed on exactly that and printed raw
   // **...** (user-reported twice)
@@ -954,6 +1009,16 @@ function note(text) {
   const div = document.createElement("div");
   div.className = "sysnote";
   div.textContent = text;
+  chat.appendChild(div);
+  scrollDown(true);
+}
+
+// A real boundary, not a whisper: a full-width brass rail pair with a
+// label marks where the fresh-context thread begins.
+function threadDivider() {
+  const div = document.createElement("div");
+  div.className = "threadsep";
+  div.textContent = "new thread · fresh context";
   chat.appendChild(div);
   scrollDown(true);
 }
@@ -1142,9 +1207,15 @@ $("deckadd").addEventListener("click", () => {
 $("newthread").addEventListener("click", () => {
   threadId = null;
   localStorage.removeItem("oragle_thread");
+  // the decklist rode along with the old thread's questions; a fresh
+  // thread starts clean so a stale list can't sneak into new context
+  pendingDeck = "";
+  $("decktext").value = "";
+  $("deckpanel").classList.add("hidden");
+  updateDeckBadge();
   showThreadbar(false);
   syncNewThreadButton();
-  note("— new thread started (fresh context) —");
+  threadDivider();
 });
 
 // ---- theme toggle: wood & leather or cold steel ---------------------

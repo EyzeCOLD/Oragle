@@ -60,50 +60,67 @@ class ReplDispatchTest(unittest.TestCase):
 
 
 class UnbracketedHintTest(unittest.TestCase):
-    """Exact-name search_cards lookups mean the user skipped [[ ]] —
+    """Exact-name query_local_cards lookups mean the user skipped [[ ]] -
     the runner prints a polite hint once, TTY stderr only, never for
-    bracketed cards."""
+    bracketed cards. search_scryfall (the live tool) never hints."""
 
-    HELIX = {"name": "Lightning Helix", "mana_cost": "{R}{W}",
-             "type_line": "Instant", "oracle_text": "3 damage."}
+    EXACT = ("SELECT name FROM cards "
+             "WHERE lookup_all LIKE '%Lightning Helix %'")
 
-    def _run(self, runner, query, tty=True):
+    def _run(self, runner, sql, tty=True, name="query_local_cards"):
         err = io.StringIO()
         if tty:
             err.isatty = lambda: True
-        with mock.patch.object(cli.cards, "search_cards",
-                               return_value=([self.HELIX], 1)), \
-                mock.patch("sys.stderr", err):
-            result = runner("search_cards", {"query": query})
+        args = {"sql": sql} if name == "query_local_cards" else {"query": sql}
+        with mock.patch.object(cli.carddb, "run_sql",
+                               return_value='{"name": "Lightning Helix"}'), \
+             mock.patch("sys.stderr", err):
+            result = runner(name, args)
         return result, err.getvalue()
 
     def test_exact_lookup_hints_once(self):
         runner = cli.make_tool_runner([])
-        _r, err1 = self._run(runner, '!"Lightning Helix"')
+        _r, err1 = self._run(runner, self.EXACT)
         self.assertIn("please surround card names", err1)
         self.assertIn("[[Lightning Helix]]", err1)
-        _r, err2 = self._run(runner, '!"Grizzly Bears"')
+        _r, err2 = self._run(runner, "SELECT name FROM cards "
+                             "WHERE lookup_all LIKE '%Grizzly Bears %'")
         self.assertEqual(err2, "")  # once per answer
 
-    def test_broad_query_no_hint(self):
+    def test_count_query_no_hint(self):
         runner = cli.make_tool_runner([])
-        _r, err = self._run(runner, "c<=2 colors:blue o:exile")
+        _r, err = self._run(runner,
+                            "SELECT COUNT(*) FROM cards "
+                            "WHERE type_line LIKE '%Creature%'")
         self.assertEqual(err, "")
 
-    def test_bare_exact_query_hints(self):
+    def test_scryfall_search_never_hints(self):
         runner = cli.make_tool_runner([])
-        _r, err = self._run(runner, "!Squee")
-        self.assertIn("[[Squee]]", err)
+        err = io.StringIO()
+        err.isatty = lambda: True
+        helix = {"name": "Lightning Helix", "mana_cost": "{R}{W}",
+                 "type_line": "Instant", "oracle_text": "3 damage."}
+        with mock.patch.object(cli.cards, "search_cards",
+                               return_value=([helix], 1)), \
+             mock.patch("sys.stderr", err):
+            runner("search_scryfall", {"query": "o:exile"})
+        self.assertEqual(err.getvalue(), "")
 
     def test_referenced_card_not_hinted(self):
         runner = cli.make_tool_runner([], referenced=("Lightning Helix",))
-        _r, err = self._run(runner, '!"Lightning Helix"')
+        _r, err = self._run(runner, self.EXACT)
         self.assertEqual(err, "")
 
     def test_piped_stderr_no_hint(self):
         runner = cli.make_tool_runner([])
-        _r, err = self._run(runner, '!"Lightning Helix"', tty=False)
+        _r, err = self._run(runner, self.EXACT, tty=False)
         self.assertEqual(err, "")
+
+    def test_scryfall_disabled_when_offline(self):
+        runner = cli.make_tool_runner([], offline=True)
+        result = runner("search_scryfall", {"query": "o:exile"})
+        self.assertIn("disabled in offline mode", result)
+        self.assertIn("query_local_cards", result)
 
     def test_hint_text_mentions_brackets(self):
         self.assertEqual(

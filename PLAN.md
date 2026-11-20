@@ -611,6 +611,102 @@ Lesson recorded: verify hidden/collapsed UI by computed display, not
 by the attribute — the earlier headless check read the property and
 passed a visible bug.
 
+## Local-first exact-name lookups in the model tool (2026-11-20, branch)
+
+Blast-radius probe ("what if we're cut off from Scryfall?") found the
+pipeline degrades correctly — NetError -> "search failed: ..." tool
+result, model reports it instead of hallucinating; rules Q&A, cards.db
+lookups and symbols all survive — with one gap: the model's
+search_cards tool resolved UNBRACKETED card mentions (its
+exact-name !"Name" query) through the live API even though the bulk
+dump already knows the card, making that lookup path the only one that
+dies while cut off, and the only deterministic-name operation that
+spent network + rate budget. _search_cards_runner now routes exact
+queries through carddb.lookup_card(offline=True) (strict DB-local) and
+falls through to live Scryfall only on a DB miss (cards newer than the
+last refresh). Discovery queries (the reason live search exists at
+all — Scryfall's ~250-operator syntax is a query engine we would
+have to reimplement, and cards.db has no colors/cmc/legalities columns
+to even represent one) always stay live. Verified with the live path
+monkeypatched to raise: DB hit resolves fully offline, DB miss and
+discovery queries degrade to "search failed".
+
+Card search exists only to serve grounded answers (user decision,
+2026-11-20, local-first-lookups branch): the `oragle cards` passthrough
+(command + tests + README section) is REMOVED. Scryfall is the best
+Scryfall — a terminal re-skin of their search is not this app's
+point, so card searching now exists solely as the model's search_cards
+tool inside the answering pipeline. Consequence for earlier reasoning
+in this file: the "we would have to reimplement Scryfall syntax"
+argument survives only for human-typed queries, and there are none
+left — the model authors every query and can learn whatever dialect
+a prompt teaches. Live Scryfall search remains the tool's engine today
+for freshness (cards newer than the last bulk import, day-old errata)
+and result ranking. Fallback plan if Scryfall goes away (sharpened by
+the user: "do we need a language when we already have a language?" -
+we do not): extend cards.db with the bulk dump's colors/cmc/
+legalities/keywords fields and give the model a READ-ONLY SQL tool
+over the table instead of any invented dialect - models are heavily
+trained on SQL, SQLite is the engine, and the prompt only needs to
+show the schema. Safety must be by construction: query_only=ON, a
+SELECT-only authorizer, single-statement parsing, row cap, execution
+timeout. The remaining real work is schema design (color flags vs
+lists, word-boundary-safe oracle_text matching like lookup_all).
+
+## query_local_cards: the model gets SQL over the card DB (2026-11-20, built)
+
+The design walked issue-by-issue in session (schema -> safety -> prompt
+-> naming -> rollout) is now implemented on this branch, per the
+user's "Build it" plus two extensions: an `oragle setup` one-command
+install, and tests for Scryfall being down.
+
+Schema v2 (cards.db): cmc REAL, colors + color_identity as canonical
+'WUBRG'-subset strings ('' = colorless), keywords + oracle_all as
+space-padded lowercase-agnostic text columns for word-boundary LIKE
+(the lookup_all padding trick generalized), type_line/oracle_text
+already merge faces via ' // ', 12 legality_<format> columns
+('legal'/'not_legal'/'banned'/'restricted'), meta.schema_version.
+Rebuild drops a pre-v2 cards table before import (full replace
+anyway; rulings survive in their own table). Decision recorded:
+colors as canonical strings not flags (exact-multicolor equality,
+contains-blue LIKE, length() thresholds all stay simple SQL);
+legality as flat columns not a child table (no joins to get wrong).
+
+carddb.run_sql: ONE statement, opened file:...?mode=ro (handle cannot
+write), PRAGMA query_only, authorizer allowing only SELECT/READ/
+FUNCTION/RECURSIVE (no ATTACH/PRAGMA/writes), progress-handler
+deadline (2s) interrupting runaway scans. Output is budgeted not
+row-capped per user amendment: aggregates return entirely; rows
+serialize (JSON per line, cells cut at 600 chars) until ~4KB, then a
+truncation note teaches narrower SELECTs. Old/existing-DB states get
+instructive strings ("run oragle refresh cards"), never exceptions.
+
+Tool split (user's "explicit source" + "verbs"): search_rules |
+query_local_cards | search_scryfall. The old search_cards name and
+its !"Name" exact-idiom are gone; the unbracketed hint now keys off
+the taught exact-lookup idiom (lookup_all LIKE '%Name %' regex).
+offline mode advertises search_rules + query_local_cards and refuses
+search_scryfall instantly ("disabled in offline mode") instead of
+sitting through a 30s network timeout - tests cover the
+Scryfall-down cases: live failure is a tool result the model
+relates, and the pipeline continues to its answer.
+
+Live observations from real runs (GLM 5.3 flash): (1) the model's
+first Grist, the Hunger Tide lookup missed because the prompt only
+taught apostrophe deletion - commas also normalize to spaces; the
+description now shows 'Grist, the Hunger Tide' -> 'grist the hunger
+tide' and the next run resolved fully locally. (2) on cell
+truncation at 400 chars the model adapted by fetching
+substr(oracle_text, 200, 400) - the self-teaching budget worked as
+designed; CELL_TRUNC raised to 600 to spare single-card rounds.
+(3) Real DB verified: COUNT aggregate (20,424 creatures) and the
+teaching-example discovery query return sensible EDHREC-ranked
+results. 199 tests green; local cards.db rebuilt (39,356 rows).
+
+`oragle setup`: rules + cards via the existing refresh paths, then a
+provider check; missing provider prints .env guidance and exit 1 but
+the local data still builds (search/rule/card work without an LLM).
+
 ## Public packaging (2026-11-20, public-packaging branch)
 
 Goal: a stranger can clone the repo and run oragle on their own API.
@@ -642,6 +738,32 @@ behavior) without breaking this user's own setup:
 The design is BYO-endpoint: the project never depended on Mistral
 specifics beyond the named-backend convenience, and detection is now
 generic-first.
+
+renderAnswer headings (2026-11-20, user: "raw pound signs in the
+output"): the web renderer had no markdown-heading pass (the CLI's
+ansi.render already strips/bolds them), so model "## heading" lines
+printed raw. renderAnswer now rewrites ^#{1,6} lines to .mdh block
+spans (title kept, trailing #s stripped, runs before the bold/em
+passes so ** inside a heading still applies). .answer .mdh is bold,
+block-display, ink-colored in both themes. Headless-verified unit
+(renderAnswer direct eval) and e2e (fake-server answer with two
+headings: 2 spans, no raw ##, computed block/700).
+
+Web thread divider + deck reset (2026-11-21, user: "decklist doesn't
+clear when you start a new thread" and "bigger divider between
+threads"): the New thread handler never reset pendingDeck, so a
+decklist attached in one thread silently rode into the next thread's
+questions. The handler now clears pendingDeck, the deckpanel
+textarea, hides the open panel and resets the Deck (n) badge. The old
+"thin line of small text" thread marker (a .sysnote) is replaced by a
+.threadsep element: full-width flex row of two embossed brass rails
+(::before/::after, noise + tex-brass + gradient, steel-theme override
+with tex-steel) flanking an uppercase "new thread · fresh context"
+label. Headless e2e against the fake server: deck badge Deck (2) -> after
+click reset to "Deck", textarea and panel cleared, one .threadsep
+child of chat with correct computed display/color in both themes;
+deck attach still works and still logs "decklist attached: n lines"
+within a thread.
 
 ## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
 
