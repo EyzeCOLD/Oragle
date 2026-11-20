@@ -260,7 +260,15 @@ the user bubble is a corner-riveted steel plate, the rulebox cold
 blued steel with gold engraving, modals are steel vault doors. Jade
 and parchment stay untouched in both themes. The stone viewport
 turbulence seam is visible at tile edges — user verdict: charming,
-left as is.
+left as is. Steel polish pass (user-reported gold carryovers + top
+bar contrast): header/form beams brightened (mid-steel #5b646e with
+a #d5e0ea top rail, near-white title, #b6c5d4 sub) so they separate
+from the dark plate wall; viewport rivets silver (#e8f1fa ring),
+ambient glow icy instead of torch-warm, stone base cool-tinted;
+sysnote (italic + glow) cool blue; placeholder #63727f; input focus
+ring icy blue (verified via CDP Emulation.setFocusEmulationEnabled
+— plain headless does not apply :focus, worth remembering when
+checking focus styles).
 
 Decklists (2026-11-19, user request "interesting, unsure how helpful"):
 mtgjudge/deck.py parses pasted decklists deterministically (Arena/MTGO

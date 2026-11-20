@@ -484,28 +484,28 @@
   /* riveted steel beams */
   body.steel header, body.steel form {
     background: var(--noise), var(--tex-steel), var(--tex-steel-coarse),
-                linear-gradient(180deg, #414a54, #262d34 70%, #181d22);
+                linear-gradient(180deg, #5b646e, #3d444c 60%, #2a3037);
     border-bottom-color: #000;
-    box-shadow: inset 0 1px 0 #95a5b5,
-                inset 0 2px 1px rgba(150, 175, 200, .35),
+    box-shadow: inset 0 1px 0 #d5e0ea,
+                inset 0 2px 1px rgba(170, 195, 220, .4),
                 inset 0 -2px 1px #05070a,
                 0 3px 0 rgba(0, 0, 0, .8),
                 0 4px 6px rgba(0, 0, 0, .5);
   }
   body.steel header { border-bottom: 1px solid #000; }
   body.steel header h1 {
-    color: #d7e4ef;
+    color: #f2f7fc;
     text-shadow: 0 -1px 0 #66788a, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9),
                  0 0 16px rgba(160, 200, 240, .25);
   }
-  body.steel header .sub { color: #8797a8; }
+  body.steel header .sub { color: #b6c5d4; text-shadow: 0 1px 0 rgba(0, 0, 0, .75); }
   /* blocky metal buttons: flat faces, hard multi-step chisels, zero blur */
   body.steel header button, body.steel #deckbtn,
   body.steel #deckpanel .row button.cancel {
     border-radius: 0;
     background: var(--noise), var(--tex-steel),
-                linear-gradient(180deg, #4b545e, #343c45 55%, #22282f);
-    color: #e3ecf6;
+                linear-gradient(180deg, #566169, #3d454f 55%, #2a303a);
+    color: #eef4fa;
     box-shadow: inset 1px 0 0 #7c8d9d,
                 inset -1px 0 0 #0d1115,
                 inset 0 1px 0 #b9c8d6,
@@ -589,6 +589,29 @@
     text-shadow: 0 -1px 0 #66788a, 0 1px 0 #000, 0 2px 2px rgba(0, 0, 0, .9);
   }
   body.steel #gate p, body.steel #deckpanel p { color: #9fb0c2; }
+  /* viewport in steel mode: silver rivets, cold ambient glow */
+  body.steel main {
+    background:
+      radial-gradient(circle at 8px 8px, #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) no-repeat,
+      radial-gradient(circle at calc(100% - 8px) 8px, #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) 100% 0 no-repeat,
+      radial-gradient(circle at 8px calc(100% - 8px), #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) 0 100% no-repeat,
+      radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), #e8f1fa 0 2px, #7d8fa0 3px, #232a31 3.5px, transparent 4px) 100% 100% no-repeat,
+      radial-gradient(60% 30% at 50% 0%, rgba(160, 205, 245, .1), transparent 70%),
+      var(--noise), var(--tex-stone), #13151a;
+  }
+  /* remaining gold carryovers -> cool equivalents */
+  body.steel .sysnote {
+    color: #b9cde0;
+    text-shadow: 0 1px 0 #000, 0 0 8px rgba(150, 200, 240, .3);
+  }
+  body.steel ::placeholder { color: #63727f; }
+  body.steel form input:focus, body.steel #deckpanel textarea:focus,
+  body.steel #gate input:focus {
+    border-color: #6f8ba3;
+    box-shadow: inset 2px 2px 6px rgba(0, 0, 0, .85),
+                inset -1px -1px 0 rgba(190, 220, 245, .08),
+                0 0 0 1px #86a8c6, 0 0 10px rgba(140, 195, 240, .35);
+  }
   body.steel ::selection { background: #2b4a52; }
   /* ---- working indicator: gold orbs -------------------------------------- */
   .dots { display: inline-flex; gap: 4px; margin-left: 8px;
