@@ -765,6 +765,54 @@ child of chat with correct computed display/color in both themes;
 deck attach still works and still logs "decklist attached: n lines"
 within a thread.
 
+Consistency work: repeat bench, temperature 0, scaffolds + A/B
+(2026-11-21): user reported high run-to-run variance and two hard
+cases (two [[Ephemerate]] copies in rebound + one [[Archaeomancer]]:
+can both be fetched back to hand; combo finding in pasted decklists).
+
+Built: `bench --repeat N` — each question N times, per-question
+consistency line ("k/N answered, same context in k/N runs, mean
+answer similarity x.xx" — pairwise Jaccard over lowercase word sets)
+and a grouped report (## per question, ### per run); parse_bench now
+keeps line structure inside a block so a multi-line decklist survives
+for deck.extract_deck; llm.chat temperature default 0.1 -> 0.0
+(reproducibility; no seed — at temp 0 it is moot and third-party
+models may reject unknown params). Two new HARD cases appended to
+dev/bench2.txt: the Ephemerate/Archaeomancer rebound line, and a
+7-card combo/classify decklist (Kiki-Jiki + Pestermite/Resto Angel/
+Felidar Guardian, Deadeye Navigator + Peregrine Drake, Panharmonicon
+as amplifier; ground truth also includes the two-Felidar and
+Felidar+Resto Angel self-blink loops, valid because Kiki-Jiki has
+haste).
+
+A/B (3 runs per cell, old prompt vs scaffolded, both at temp 0,
+offline, zai-glm-5.3-flash; wall 74-772s per answer — provider very
+slow that day): retrieval is perfectly deterministic — the context-id
+set was identical in 3/3 runs in every cell, so the variance is
+entirely model reasoning, never the pipeline. Temp 0 gave one
+verbatim-identical pair (new/decklist runs 1-2) but no correctness
+gain. Ephemerate: old 1/3 correct, new 1/3 fully correct (its run 1
+was the best answer of all six: correct line, assumptions listed,
+failure modes shown) + 1 right-conclusion-wrong-mechanism ("exiled
+again by rebound" hallucination persists). Decklist: old 3/3 correct
+(citing 110.5b/702.10c/104.4b, run 2 even found Felidar+Felidar and
+Felidar+Resto Angel), new 1/3 — the two wrong runs were verbatim
+copies mechanically walking all 7 cards per the combo rubric's
+template, then classified Kiki+Pestermite as "not connected" and
+invented "Panharmonicon doubles the {1}{U} abilities -> infinite".
+Lesson: the step-by-step rubric for decklists made the model spend its
+budget on format compliance and issue shallow wrong verdicts, while
+the sequence rubric (one action at a time, state the board) produced
+the study's best answer. Actions: decklist combo rubric REPLACED with
+a short anti-walkthrough instruction (evaluate candidate pairs
+directly, cite Oracle text, no card-by-card padding); sequence rubric
+and assumptions bullet kept. Open: model tier is the remaining
+bottleneck — gold-standard answers came with 300-700s walls and
+mechanism errors on the hardest case; a larger repeat bench is the
+honest way to compare glm-flash vs its bigger siblings once the
+provider decision lands (z.ai PAYG direction). Data:
+/tmp/ab_results.json, driver /tmp/ab_bench.py.
+
 ## Mistral billing: the 402 saga and the call_type marker (2026-11-20)
 
 Direct api.mistral.ai calls with a console key started returning HTTP

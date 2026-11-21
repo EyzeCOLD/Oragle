@@ -46,3 +46,23 @@ I cast Teferi's Protection, and my opponent follows with Supreme Verdict
 that same turn, then an overloaded Cyclonic Rift on their next turn. What
 happens to my permanents each time, can I take damage meanwhile, and when
 does everything phase back in?
+
+HARD:
+It is the start of my upkeep. Both of my two copies of [[Ephemerate]] are in
+exile with rebound, cast from my hand on my previous turn, and I control one
+[[Archaeomancer]] and nothing else that matters. Can I order and resolve the
+two rebound triggers so that I end the turn with both copies of Ephemerate
+back in my hand? Walk through the full sequence, stack included, and say
+which rule makes each step work.
+
+HARD:
+Which combinations of cards in this decklist go infinite, which are capped
+synergies, and which pairs only look like combos but do not connect? Judge
+strictly from the Oracle text in context and cite the text you rely on.
+4 Kiki-Jiki, Mirror Breaker
+4 Pestermite
+4 Deadeye Navigator
+4 Peregrine Drake
+2 Panharmonicon
+2 Felidar Guardian
+2 Restoration Angel

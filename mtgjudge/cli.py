@@ -165,6 +165,9 @@ Answering rules:
 - If part of the question involves rules NOT present in the context blocks (e.g. the legend rule for two copies of a legendary card, or how hybrid mana symbols determine color), do not fill the gap from memory: use the search_rules tool with rule keywords (e.g. "legendary permanent same name" or "hybrid mana symbol colors") to fetch the relevant rules, then answer citing them.
 - The conversation may include earlier turns; use them only to resolve references in the current question (e.g. "what about two headed giant?" refers to the earlier topic). Earlier turns never justify claims on their own: every statement in your answer must still be grounded in the current context blocks and cited, or met with "This is not covered in the retrieved rules."
 - A pasted decklist arrives as CARD blocks noting copies "in the decklist". Answer rules questions about its composition (interactions, combos, legality, what happens when its cards meet) with citations as usual. You are NOT a deck advisor: for evaluation or improvement questions ("is this deck good", "what should I cut", "what would make this competitive") say briefly that you are a rules judge without a metagame model, so you cannot rank or suggest strategies or cards outside the provided context, and offer the rules-grounded part if one exists.
+- Sequence questions (several triggers, the stack, rebound, replacement-effect ordering, "what happens first"): work mechanically, never resolving two things at once in your head. First lay out the starting state (battlefield, exile, graveyards, stack). Then take one action at a time: state what happens, cite or fetch the governing rule with search_rules (rebound, the stack, state-based actions...) before relying on it, and show the resulting positions before the next action. Where an ordering choice exists (you control the triggers, you choose replacement order), state the order you picked and whether the other order changes the outcome.
+- When you analyze a decklist for combos or interactions, evaluate candidate pairs directly against the Oracle text in context (cite it); do not pad the answer with a card-by-card walkthrough, and claim no combo you have not verified against the text in context.
+- When the game state is underspecified, assume the plainest reading, but list your numbered assumptions at the top of the answer (e.g. "assuming: only the named permanents are on the battlefield; no responses; all targets legal"). If a materially different assumption would change the answer, say what changes.
 """
 
 QUERY_CARDS_TOOL = {
@@ -844,11 +847,15 @@ BENCH_HARD_RE = re.compile(r"^HARD:\s*", re.IGNORECASE)
 
 def parse_bench(path):
     """bench.txt format: questions separated by blank lines; a 'HARD:'
-    prefix marks difficulty."""
+    prefix marks difficulty. Lines within a block are kept as separate
+    lines (whitespace-run collapsed), because a block may contain a
+    multi-line decklist which the request pipeline only detects with
+    line structure intact."""
     text = Path(path).read_text(encoding="utf-8")
     items = []
     for block in re.split(r"\n\s*\n", text.strip()):
-        block = " ".join(block.split())
+        lines = [re.sub(r"\s+", " ", ln.strip()) for ln in block.splitlines()]
+        block = "\n".join(ln for ln in lines if ln)
         if not block:
             continue
         tag = None
@@ -857,6 +864,35 @@ def parse_bench(path):
             block = BENCH_HARD_RE.sub("", block)
         items.append((tag, block))
     return items
+
+
+def _answer_similarity(answers):
+    """Mean pairwise Jaccard similarity of the answers' lowercase word
+    sets, 0..1 — a rough 'did the model say the same thing' gauge for
+    repeat bench runs. 1.0 for fewer than two answers."""
+    sets = [set(re.findall(r"[a-z0-9']+", a.lower())) for a in answers]
+    if len(sets) < 2:
+        return 1.0
+    sims = [len(a & b) / len(a | b) if (a | b) else 1.0
+            for i, a in enumerate(sets) for b in sets[i + 1:]]
+    return sum(sims) / len(sims)
+
+
+def _consistency_line(runs):
+    """One summary line for the N repeat runs of a question: answered
+    count, how many runs saw the same retrieved context, and mean
+    answer similarity."""
+    ok = [r for r in runs if "answer" in r]
+    if not ok:
+        return "0/N answered"
+    ctx_counts = {}
+    for r in ok:
+        key = tuple(r.get("context_ids") or [])
+        ctx_counts[key] = ctx_counts.get(key, 0) + 1
+    same_ctx = max(ctx_counts.values())
+    sim = _answer_similarity([r["answer"] for r in ok])
+    return (f"{len(ok)}/{len(runs)} answered, same context in "
+            f"{same_ctx}/{len(ok)} runs, mean answer similarity {sim:.2f}")
 
 
 def cmd_bench(args):
@@ -870,62 +906,95 @@ def cmd_bench(args):
     if not items:
         print(f"No questions found in {args.file}.")
         return 1
+    repeat = max(1, args.repeat or 1)
 
-    print(f"mtg bench: {len(items)} question(s) from {args.file}", flush=True)
+    print(f"mtg bench: {len(items)} question(s) from {args.file}"
+          + (f", {repeat} run(s) each" if repeat > 1 else ""), flush=True)
     results = []
     for index, (tag, question) in zip(base, items):
         label = f"[{index}] " + ("(HARD) " if tag else "") + question
         print(f"\n{'=' * 70}\n{label}\n{'=' * 70}", flush=True)
-        try:
-            res = answer_question(question, top=args.top, offline=args.offline,
-                                   backend=args.backend, model=args.model)
-        except Exception as e:  # noqa: BLE001 - run all questions despite failures
-            print(f"error: {e}", flush=True)
-            res = {"error": str(e)}
-        results.append({"tag": tag, "question": question, **{
-            k: v for k, v in res.items() if k != "blocks"}})
-        if "error" in res:
-            print(f"error: {res['error']}", flush=True)
-            continue
-        print(res["answer"], flush=True)
-        print(f"\n[context: {', '.join(res['context_ids'])}] "
-              f"[took {res['elapsed']:.0f}s]", flush=True)
+        for run in range(1, repeat + 1):
+            if repeat > 1:
+                print(f"--- run {run}/{repeat} ---", flush=True)
+            try:
+                res = answer_question(question, top=args.top,
+                                      offline=args.offline,
+                                      backend=args.backend, model=args.model)
+            except Exception as e:  # noqa: BLE001 - run all questions despite failures
+                print(f"error: {e}", flush=True)
+                res = {"error": str(e)}
+            results.append({"tag": tag, "question": question, "index": index,
+                            "run": run,
+                            **{k: v for k, v in res.items() if k != "blocks"}})
+            if "error" in res:
+                print(f"error: {res['error']}", flush=True)
+                continue
+            print(res["answer"], flush=True)
+            print(f"\n[context: {', '.join(res['context_ids'])}] "
+                  f"[took {res['elapsed']:.0f}s]", flush=True)
+            if repeat > 1:
+                print(f"--- end run {run}/{repeat} ---", flush=True)
 
     report = Path(args.report)
-    _write_bench_report(report, results)
+    _write_bench_report(report, results, repeat)
     ok = [r for r in results if "answer" in r]
     total = sum(r.get("elapsed", 0) for r in results)
     print(f"\n{'=' * 70}\nDone: {len(ok)}/{len(results)} answered, "
           f"{total:.0f}s total. Report: {report}", flush=True)
+    if repeat > 1:
+        runs_by_q = {}
+        for r in results:
+            runs_by_q.setdefault(r["index"], []).append(r)
+        print(f"\nConsistency per question ({repeat} runs each):")
+        for index, runs in sorted(runs_by_q.items()):
+            print(f"  [{index}] {_consistency_line(runs)}", flush=True)
     return 0
 
 
-def _write_bench_report(path, results):
+def _write_bench_report(path, results, repeat=1):
     answered = [r for r in results if "answer" in r]
     cr_date = answered[0]["meta"]["effective_date"] if answered else "?"
     backend = f"{answered[0]['backend']} ({answered[0]['model']})" if answered else "?"
     lines = [
         f"# mtg bench — {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         f"Backend: {backend}, CR effective {cr_date}, "
-        f"{len(answered)}/{len(results)} answered.",
+        + (f"{repeat} run(s) per question, "
+           f"{len(answered)}/{len(results)} runs answered."
+           if repeat > 1 else f"{len(answered)}/{len(results)} answered."),
         "",
     ]
-    for i, r in enumerate(results, 1):
-        hard = " (HARD)" if r["tag"] else ""
-        lines.append(f"## {i}.{hard} {r['question']}")
-        if "error" in r:
-            lines.append(f"\n**Error:** {r['error']}\n")
-        else:
-            lines.append(f"\n**Context:** {', '.join(r['context_ids'])}  ")
-            stats = r.get("stats") or {}
-            detail = ""
-            if stats.get("rounds"):
-                detail = (f", {stats['rounds']} model round(s), "
-                          f"{stats.get('model_seconds', 0):.0f}s model time"
-                          + f", {stats.get('tool_calls', 0)} tool calls"
-                          if stats.get("rounds") else "")
-            lines.append(f"**Time:** {r['elapsed']:.0f}s{detail}\n")
-            lines.append(r["answer"])
+    # group runs per question, preserving first-seen order
+    order, groups = [], {}
+    for r in results:
+        key = r["index"]
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(r)
+    for index in order:
+        runs = groups[index]
+        r0 = runs[0]
+        hard = " (HARD)" if r0["tag"] else ""
+        lines.append(f"## {index}.{hard} {r0['question']}")
+        if repeat > 1:
+            lines.append(f"\n**Consistency:** {_consistency_line(runs)}\n")
+        for r in runs:
+            if repeat > 1:
+                lines.append(f"\n### run {r['run']}")
+            if "error" in r:
+                lines.append(f"\n**Error:** {r['error']}\n")
+            else:
+                lines.append(f"\n**Context:** {', '.join(r['context_ids'])}  ")
+                stats = r.get("stats") or {}
+                detail = ""
+                if stats.get("rounds"):
+                    detail = (f", {stats['rounds']} model round(s), "
+                              f"{stats.get('model_seconds', 0):.0f}s model time"
+                              + f", {stats.get('tool_calls', 0)} tool calls"
+                              if stats.get("rounds") else "")
+                lines.append(f"**Time:** {r['elapsed']:.0f}s{detail}\n")
+                lines.append(r["answer"])
         lines.append("\n---\n")
     path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -1272,6 +1341,8 @@ def main(argv=None):
                    else str(Path(__file__).resolve().parent.parent
                             / "dev" / "bench.txt"))
     p.add_argument("--only", help="comma-separated question numbers (1-based), e.g. '1,4'")
+    p.add_argument("--repeat", type=int, default=1,
+                   help="run each question N times and report run-to-run consistency")
     p.add_argument("--top", type=int, default=8)
     p.add_argument("--report", default="bench-last.md")
     p.add_argument("--backend", choices=["mistral", "lmstudio", "ollama"])

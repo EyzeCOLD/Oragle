@@ -140,10 +140,14 @@ def _assemble_stream_chunk(chunk, content_parts, tool_call_slots, on_text):
     return had_answer_text
 
 
-def chat(backend, model, messages, temperature=0.1, tools=None, progress=None,
+def chat(backend, model, messages, temperature=0.0, tools=None, progress=None,
          stream=None, elapsed=None, info=None, first_answer_deadline=None):
     """One completion call. Returns the raw assistant message dict (content
     may be a string, a block list, or None alongside tool_calls).
+
+    temperature defaults to 0.0 (greedy decoding): rules answers should
+    be reproducible run to run; variety is a bug here, and the
+    remaining run-to-run spread comes from tool paths, not sampling.
 
     stream: optional callable receiving each text delta as it arrives, so
     callers can show the answer while it is generated. Tool-call deltas are
